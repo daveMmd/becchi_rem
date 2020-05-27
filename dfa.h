@@ -61,6 +61,7 @@
 #include "linked_set.h"
 #include "wgraph.h"
 #include "partition.h"
+//#include "nfa.h" //a lot of errors
 #include <map>
 #include <set>
 #include <list>
@@ -123,6 +124,9 @@ private:
 public:
     /*add by dave*/
     unsigned char **mask_table;
+
+    //map <state_t, nfa_set*> *border;
+    void *border; //suck
 
     void initialize_masktable();
 

@@ -61,7 +61,8 @@
 
 /* HFA construction  (see HybridFA(), HybridFA::special()) */ 
 #define SPECIAL_MIN_DEPTH 5     // minimum NFA depth of a special state
-#define MAX_TX 250		        // maximum number of outgoing transitions allowed in a expanded NFA state 
+#define MAX_TX 250		        // maximum number of outgoing transitions allowed in a expanded NFA state
+//#define MAX_TX 2
 #define MAX_HEAD_SIZE 1000      // maximum number of states in the head automaton before starting to create tails
 //#define TAIL_DFAS 		    // do we want to build tail-DFA and to have at most one activation of each tail?
 

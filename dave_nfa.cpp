@@ -65,7 +65,6 @@ void NFA::get_id2state() {
     this->traverse(allStates);
     if(allStates == NULL) debugPrint("allStates NULL!");
     FOREACH_SET(allStates, it) {
-
         id2state[(*it)->id] = *it;
     }
     delete allStates;

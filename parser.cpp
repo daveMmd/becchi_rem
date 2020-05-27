@@ -682,6 +682,7 @@ list<NFA *> *regex_parser::parse_to_list_mp(FILE *file, int *size) {
         if(fgets(tmp, 1000, file)==NULL) break;
         if(tmp[0]=='#') continue;
         int len=strlen(tmp);
+        if(len == 1 && tmp[len-1] == '\n') continue; //jump empty line
         if(tmp[len-1] == '\n')
         {
             tmp[len-1]='\0';
@@ -722,9 +723,10 @@ list<NFA *> *regex_parser::parse_to_list_mp(FILE *file, int *size) {
 
 #pragma omp critical (section_2)
         {
+            nfa->get_first()->pattern = re;
             nfa_list->push_back(nfa->get_first());
         }
-        free(re);
+        //free(re);
     }
 
     return nfa_list;

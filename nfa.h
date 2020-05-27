@@ -113,6 +113,8 @@ static state_t nstate_nr=0;
 class NFA{
 public:
     /**/
+    char *pattern; //debug
+
     vector<NFA *> id2state;
 
     int _size;
@@ -336,6 +338,9 @@ public:
 	/* recursive call to dot-file generation */
 	void to_dot(FILE *file, bool blue=false);
 
+	/*add by dave*/
+    void get_id2state();
+
 private:
 	
 	/* returns the set of identifiers corresponding to the given set of NFA states
@@ -364,7 +369,6 @@ private:
 
     nfa_set* bits2states(bitset<MAX_NFA_SIZE> &bits);
 
-    void get_id2state();
 };
 
 inline void NFA::accept(){this->accepting->insert(++num_rules);}

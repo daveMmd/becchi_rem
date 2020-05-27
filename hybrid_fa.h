@@ -72,6 +72,9 @@ class HybridFA{
 	/* non-special states (for construction: to avoid that a state classified as non-special at the beginning
 	 * of the construction becomes special later on) */
 	nfa_set *non_special;
+
+	/**/
+	nfa_list *nfaList;
 	
 public:
 
@@ -103,18 +106,41 @@ public:
 	
 	/* exports the head of the Hybrid-FA into format suitable for dot program (http://www.graphviz.org/) */
 	void to_dot(FILE *file, const char *title);
+
+	/*dump hfa to excecute scanning in another platform*/
+	void dumpmem(char* fname);
 	
 private:
 
 	// builds the hybrid-FA for the current NFA.
 	void build();
 
+	//build using hm accelerating
+	void hmbuild(nfa_list *ptr_nfalist);
+
+	//used for hmbuild, nfa2dfa with border
+    DFA* nfa2dfa_withborder(NFA * nfa);
+
 	// determines when a NFA state is special (that is, it must not be expanded).
 	bool special(NFA *nfa);
+
+	//used in hm construction
+    bool hmspecial(NFA *nfa);
 	
 	// modified nfa so that its more suitable for Hybrid-FA creation
 	void optimize_nfa_for_hfa(NFA *nfa, unsigned depth);
-	
+
+	/*rearrange all nfa ids*/
+    int rearrange_nfaids();
+
+    void* dumphead(int &accept_node_offset, int &nfaset_offset);
+
+    void* dumpnfa(int nfasize, int &accept_node_offset, int &nfaset_offset);
+
+    void* dumpnfaset(int nfaset_offset);
+
+    void* dumpaccept(int accept_node_offset);
+
 };
 
 inline NFA *HybridFA::get_nfa(){return nfa;}

@@ -68,6 +68,7 @@ NFA::NFA(){
 	first=this;
 	last=this;
 	cloned_nfa=NULL;
+	pattern = NULL;
 }
 
 /* destructor */
@@ -95,6 +96,7 @@ NFA::~NFA(){
     }*/
     for(vector<bitset<MAX_NFA_SIZE> *>::iterator it=succs.begin(); it!=succs.end(); it++) delete(*it);
 
+    if(pattern != NULL) free(pattern);
 }
 
 NFA* NFA::clone() {
@@ -165,6 +167,34 @@ void NFA::traverse(nfa_set *queue){
 	FOREACH_SET(queue,it) (*it)->marked=false;
 	delete q;
 }
+
+/*void NFA::traverse(nfa_set *queue){
+    nfa_list *q=new nfa_list();
+    q->push_back(this);
+    queue->insert(this);
+    this->marked=true;
+    while(!q->empty()){
+        NFA *qnfa=q->front(); q->pop_front();
+        FOREACH_PAIRSET(qnfa->transitions,it){
+            NFA *nfa=(*it)->second;
+            if(queue->find(nfa) == queue->end()){
+                q->push_back(nfa);
+                queue->insert(nfa);
+            }
+        }
+        if (qnfa->epsilon==NULL) printf("epsilon is NULL!\n");
+        //if (!qnfa->epsilon->empty()) printf("epsilon is NOT empty!\n");
+        FOREACH_LIST(qnfa->epsilon,it){
+            NFA *nfa=*it;
+            if(queue->find(nfa) == queue->end()){
+                q->push_back(nfa);
+                queue->insert(nfa);
+            }
+        }
+    }
+    FOREACH_SET(queue,it) (*it)->marked=false;
+    delete q;
+}*/
 
 void NFA::traverse(nfa_list *queue){
 	nfa_list *q=new nfa_list();

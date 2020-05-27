@@ -42,6 +42,8 @@
 
 #include "hybrid_fa.h"
 #include "subset.h"
+#include "hierarMerging.h"
+#include "hfadump.h"
 
 bool HybridFA::special(NFA *nfa){
 	if (SET_MBR(non_special,nfa)) return false; 
@@ -53,10 +55,10 @@ bool HybridFA::special(NFA *nfa){
 		non_special->insert(nfa);
 		return false;
 	}
-	if (head->size()<MAX_HEAD_SIZE){
+	/*if (head->size()<MAX_HEAD_SIZE){
 		non_special->insert(nfa);
 		return false;
-	}
+	}*/
 #ifdef TAIL_DFAS
 	/* if we want to ensure that each tail has only one activation, 
 	 * we must exclude all those dot-star terms such that the characters
@@ -111,6 +113,20 @@ bool HybridFA::special(NFA *nfa){
 #endif
 	//printf ("HybridFA:: special(): NFA-state %d is special\n",nfa->get_id());
 	return true;
+}
+
+bool HybridFA::hmspecial(NFA *nfa){
+    if(nfa->get_depth() >= 10){
+        return true;
+    }
+    if (nfa->get_transitions()->size()<=MAX_TX){
+        return false;
+    }
+    if (nfa->get_depth()<SPECIAL_MIN_DEPTH){
+        return false;
+    }
+    //if(root_nfa != NULL) printf ("HybridFA:: hmspecial(): NFA-state %d is special, total %d states \n", nfa->get_id(), root_nfa->size());
+    return true;
 }
 
 void HybridFA::optimize_nfa_for_hfa(NFA *nfa, unsigned depth){
@@ -401,30 +417,52 @@ void HybridFA::optimize_nfa_for_hfa(NFA *nfa, unsigned depth){
 HybridFA::HybridFA(NFA *_nfa){
 	nfa=_nfa;
 	head = new DFA();
+	nfaList = NULL; /*add by dave*/
 	non_special = new nfa_set();
 	border=new map <state_t,nfa_set*>();
+	printf("before remove epsilon\n");
 	nfa->remove_epsilon();
+    printf("finish remove epsilon\n");
 	nfa->reset_state_id();
 #ifdef TAIL_DFAS	
 	optimize_nfa_for_hfa(nfa,SPECIAL_MIN_DEPTH);
 #endif 	
 	nfa->set_depth();
+    printf("before build()\n");
 	build();
+
+    printf("head size(dfa): %d, border size: %d, nfa size: %d\n", head->size(), border->size(), nfa->size());
 }
 
 HybridFA::HybridFA(nfa_list *ptr_nfalist){
     //nfa=_nfa;
-    nfa = NULL;//todo
-    head = new DFA();
-    non_special = new nfa_set();
+    //remove epsilon for each nfa && reset state id from 0 && set depth
+    state_t newid = 0;
+    fprintf(stderr, "before remove_epsilon && set_depth\n");
+    int dit = 0;
+    int size = ptr_nfalist->size();
+    nfaList = new nfa_list();
+    FOREACH_LIST(ptr_nfalist, it){
+        //if(dit%20 == 0) fprintf(stderr, "remove_epsilon: %d/%d\n", dit, size);
+        fprintf(stderr, "pattern: %s\n", (*it)->pattern);
+        fprintf(stderr, "remove_epsilon: %d/%d\n", dit, size);
+        dit++;
+        (*it)->remove_epsilon();
+        (*it)->reset_state_id();
+        //(*it)->reset_state_id(newid);
+        newid += (*it)->size();
+        (*it)->set_depth();
+        nfaList->push_back((*it));
+    }
+    fprintf(stderr, "\n");
+    nfa = NULL;//todo, may affect trace
+    //non_special = new nfa_set();
     border=new map <state_t,nfa_set*>();
-    nfa->remove_epsilon();
-    nfa->reset_state_id();
-#ifdef TAIL_DFAS
-    optimize_nfa_for_hfa(nfa,SPECIAL_MIN_DEPTH);
-#endif
-    nfa->set_depth();
-    build();
+    printf("before hmbuild\n");
+    hmbuild(ptr_nfalist);
+    printf("head size(dfa): %d, border size: %d, nfa size: %d\n", head->size(), border->size(), newid);
+    //copy nfa_list
+    //nfaList = ptr_nfalist;
 }
 	
 
@@ -435,6 +473,7 @@ HybridFA::~HybridFA(){
 	delete border;
 	delete head;
 	if (non_special!=NULL) delete non_special;
+	if(nfaList!=NULL) delete nfaList;
 }
 
 set<state_t> *set_NFA2ids(nfa_set *fas){
@@ -443,8 +482,117 @@ set<state_t> *set_NFA2ids(nfa_set *fas){
 		ids->insert((*it)->get_id());
 	}
 	return ids;
-}	
+}
 
+void HybridFA::hmbuild(nfa_list* ptr_nfalist){
+    //nfa list to dfa list, gen border
+    list<DFA*> *ptr_dfalist = new list<DFA *>();
+    FOREACH_LIST(ptr_nfalist, it){
+        DFA* dfa = nfa2dfa_withborder((*it));
+        if(dfa->size() > 50){
+            printf("pattern: %s , head size: %d\n", (*it)->pattern, dfa->size());
+            delete dfa;
+            continue;
+        }
+        ptr_dfalist->push_back(dfa);
+    }
+    head = hm_dfalist2dfa(ptr_dfalist);
+    //copy, prevent delete error
+    *border = *((map <state_t, nfa_set*>*) head->border);
+}
+
+DFA* HybridFA::nfa2dfa_withborder(NFA * nfa){
+    // contains mapping between DFA and NFA set of states
+    subset *mapping=new subset(0);
+    //queue of DFA states to be processed and of the set of NFA states they correspond to
+    list <state_t> *queue = new list<state_t>();
+    list <nfa_set*> *mapping_queue = new list<nfa_set*>();
+    //iterators used later on
+    //nfa_set::iterator set_it;
+    //new head state id
+    state_t target_state=NO_STATE;
+    //set of nfas state corresponding to target head state
+    nfa_set *target=new nfa_set(); //in FA form
+    set <state_t> *ids=NULL; //in id form
+
+    /* code begins here */
+    //initialize data structure starting from INITIAL STATE
+    target->insert(nfa);
+    ids=set_NFA2ids(target);
+
+    DFA* dfa = new DFA(); //return DFA
+    map <state_t, nfa_set*> *dfaborder =(map <state_t, nfa_set*> *) dfa->border; //
+
+    mapping->lookup(ids, dfa, &target_state);
+    delete ids;
+    FOREACH_SET(target,set_it) dfa->accepts(target_state)->add((*set_it)->get_accepting());
+    queue->push_back(target_state);
+    mapping_queue->push_back(target);
+
+    // process the states in the queue and adds the not yet processed DFA states
+    // to it while creating them
+    while (!queue->empty()){
+        //dequeue an element
+        state_t state=queue->front(); queue->pop_front();
+        nfa_set *cl_state=mapping_queue->front(); mapping_queue->pop_front();
+        //printf("DFA state %d:: NFA subset:",state); FOREACH_SET(cl_state,it) printf("%d ",(*it)->get_id()); ;printf("\n");
+        // each state must be processed only once
+        if(!dfa->marked(state)){
+            dfa->mark(state);
+            nfa_set *no_special= new nfa_set();
+            FOREACH_SET(cl_state,set_it){
+                NFA *_nfa=*set_it;
+                if (hmspecial(_nfa)) {
+                    /*if ((*border)[state]==NULL) (*border)[state]= new nfa_set();
+                    (*border)[state]->insert(_nfa);*/
+                    if ((*dfaborder)[state]==NULL) (*dfaborder)[state]= new nfa_set();
+                    (*dfaborder)[state]->insert(_nfa);
+                }
+                else no_special->insert(_nfa);
+            }
+            //iterate other all characters and compute the next state for each of them
+            for(symbol_t i=0;i<CSIZE;i++){
+                target= new nfa_set();
+                FOREACH_SET(no_special,set_it){
+                    nfa_set *state_set=(*set_it)->get_transitions(i);
+                    if (state_set!=NULL){
+                        target->insert(state_set->begin(), state_set->end());
+                        delete state_set;
+                    }
+                }
+
+                //look whether the target set of state already corresponds to a state in the DFA
+                //if the target set of states does not already correspond to a state in a DFA,
+                //then add it
+                ids=set_NFA2ids(target);
+                bool found=mapping->lookup(ids, dfa, &target_state);
+                delete ids;
+                if (!found){
+                    queue->push_back(target_state);
+                    mapping_queue->push_back(target);
+                    FOREACH_SET(target,set_it){
+                        dfa->accepts(target_state)->add((*set_it)->get_accepting());
+                    }
+                    if (target->empty()) dfa->set_dead_state(target_state);
+                }else{
+                    delete target;
+                }
+                dfa->add_transition(state, i, target_state); // add transition to the DFA
+            }//end for on character i
+            delete no_special;
+        }//end if state marked
+        delete cl_state;
+    }//end while
+
+    //deallocate all the sets and the state_mapping data structure
+    delete queue;
+    delete mapping_queue;
+    if (DEBUG) mapping->dump(); //dumping the NFA-DFA number of state information
+    delete mapping;
+
+    //printf("head dfa states: %d, dfa border size: %d, nfa states: %d\n", dfa->size(), dfaborder->size(), nfa->size());
+    return dfa;
+}
 //assumes that the epsilon transitions have been removed
 void HybridFA::build(){
 	// contains mapping between DFA and NFA set of states
@@ -474,7 +622,8 @@ void HybridFA::build(){
 	// to it while creating them
 	while (!queue->empty()){
 		//dequeue an element
-		state_t state=queue->front(); queue->pop_front(); 
+		state_t state=queue->front(); queue->pop_front();
+		if(state % 1000 == 0) printf("building state : %d\n", state);
 		nfa_set *cl_state=mapping_queue->front(); mapping_queue->pop_front();
 		//printf("DFA state %d:: NFA subset:",state); FOREACH_SET(cl_state,it) printf("%d ",(*it)->get_id()); ;printf("\n");
 		// each state must be processed only once
@@ -483,8 +632,9 @@ void HybridFA::build(){
 			nfa_set *no_special= new nfa_set();
 			FOREACH_SET(cl_state,set_it){
 				NFA *_nfa=*set_it;
-				if (special(_nfa)) {
-					if ((*border)[state]==NULL) (*border)[state]= new nfa_set(); 
+				//if (special(_nfa)) {
+				 if(hmspecial(_nfa)) {
+					if ((*border)[state]==NULL) (*border)[state]= new nfa_set();
 					(*border)[state]->insert(_nfa);
 				}
 				else no_special->insert(_nfa);			
@@ -1035,7 +1185,7 @@ void HybridFA::minimize() {
 	fprintf(file, "digraph \"%s\" {\n", title);
 	for (state_t s=0;s<head->size();s++){
 		if (accept_state[s]->empty()){
-			if (border->find(s)==border->end()) 
+			if (border->find(s)==border->end())
 				fprintf(file, " %ld [shape=circle];\n", s);
 			else	
 				fprintf(file, " %ld [shape=box];\n", s);
@@ -1153,4 +1303,376 @@ void HybridFA::minimize() {
   	delete tails;
   	return result;
   }
- 
+
+  int HybridFA::rearrange_nfaids(){
+      //NFA state id rearrange(from 0 to n-1)
+      nfa_list *temp_nfaList = new nfa_list();
+      int id = 0;
+      FOREACH_LIST(nfaList, it){
+          nfa_list nfas;
+          (*it)->traverse(&nfas);
+          nfa_list *ptr_nfas = &nfas;
+          FOREACH_LIST(ptr_nfas, it2){
+              (*it2)->id = (id++);
+              temp_nfaList->push_back(*it2);
+          }
+      }
+
+      delete nfaList;
+      nfaList = temp_nfaList;
+      return id;
+    }
+
+void* HybridFA::dumphead(int &accept_node_offset, int &nfaset_off){
+    dfa_mem_block* dfa_mem = (dfa_mem_block*) malloc(sizeof(dfa_mem_block) * head->size());
+
+    state_t** stt = head->get_state_table();
+    for(int state=0; state < head->size(); state++){
+        memcpy(dfa_mem[state].nextstates, stt[state], sizeof(state_t)*ALPHABET_SIZE);
+        assert(head->accepts(state)->size() < 16); //maximum accept rules supported by one node
+        dfa_mem[state].stateaccepts.accept_num = head->accepts(state)->size();
+        dfa_mem[state].stateaccepts.accept_offset = accept_node_offset;
+        accept_node_offset += head->accepts(state)->size();
+        //check if the state is in border
+        map<state_t, nfa_set *>::iterator mapit = border->find(state);
+        if(mapit == border->end()){
+            dfa_mem[state].isborder=VALUE_NULL;
+        }
+        else{
+            dfa_mem[state].offset_to_nfaset = nfaset_off;
+            nfaset_off += mapit->second->size();
+        }
+    }
+
+    return dfa_mem;
+}
+
+void* HybridFA::dumpnfa(int nfasize, int &accept_node_offset, int &nfaset_offset){
+    //todo
+    nfa_mem_block* nfa_mem = (nfa_mem_block *) malloc(sizeof(nfa_mem_block) * nfasize);
+    FOREACH_LIST(nfaList, it){
+        state_t nfa_id = (*it) ->id;
+        for(symbol_t c=0; c<ALPHABET_SIZE; c++){
+            nfa_set *nextstates =(*it)->get_transitions(c);
+            if(nextstates == NULL) nfa_mem[nfa_id].nextstates_offset[c] = VALUE_NULL;
+            else{
+                nfa_mem[nfa_id].nextstates_offset[c] = nfaset_offset;
+                nfaset_offset += nextstates->size();
+                nfaset_offset++; //one slot indicating tail
+            }
+            //free
+            if(nextstates != NULL) delete nextstates;
+        }
+
+        linked_set* accept_rules = (*it)->get_accepting();
+        assert(accept_rules->size() < 16);
+        nfa_mem[nfa_id].stateaccepts.accept_num = accept_rules->size();
+        accept_node_offset += accept_rules->size();
+    }
+    return nfa_mem;
+}
+
+void* HybridFA::dumpnfaset(int nfaset_offset){
+    //todo
+    state_t *nfaset_mem = (state_t *) malloc(sizeof(state_t) * nfaset_offset);
+
+    nfaset_offset = 0;
+    //nfa nfaset
+    FOREACH_LIST(nfaList, it) {
+        for(symbol_t c=0; c<ALPHABET_SIZE; c++) {
+            nfa_set *nextstates = (*it)->get_transitions(c);
+            if(nextstates == NULL) continue;
+            FOREACH_SET(nextstates, it2){
+                nfaset_mem[nfaset_offset++] = (*it2)->id;
+            }
+            nfaset_mem[nfaset_offset++] = VALUE_END;
+            //free
+            if(nextstates != NULL) delete nextstates;
+        }
+    }
+
+    //border nfaset
+    for(int state=0; state < head->size(); state++){
+
+        //check if the state is in border
+        map<state_t, nfa_set *>::iterator mapit = border->find(state);
+        if(mapit == border->end()) continue;
+        else{
+            nfa_set* nfaSet = mapit->second;
+            FOREACH_SET(nfaSet, it){
+                nfaset_mem[nfaset_offset++] = (*it)->id;
+            }
+            nfaset_mem[nfaset_offset++] = VALUE_END;
+        }
+    }
+
+    return nfaset_mem;
+}
+
+void* HybridFA::dumpaccept(int accept_node_offset){
+    //todo
+    node_set_app_id_and_aging* accept_node_mem = (node_set_app_id_and_aging*) malloc(sizeof(node_set_app_id_and_aging) * accept_node_offset);
+    accept_node_offset = 0;
+
+    //NFA accept
+    FOREACH_LIST(nfaList, it){
+        linked_set* accept_rules = (*it)->get_accepting();
+        while(accept_rules != NULL && !accept_rules->empty()){
+            accept_node_mem[accept_node_offset++].app_id = accept_rules->value();
+            accept_rules = accept_rules->succ();
+        }
+    }
+
+    //DFA accept
+    for(int state=0; state < head->size(); state++){
+        linked_set* accept_rules = head->accepts(state);
+        while(accept_rules != NULL && !accept_rules->empty()){
+            accept_node_mem[accept_node_offset++].app_id = accept_rules->value();
+            accept_rules = accept_rules->succ();
+        }
+    }
+
+    return accept_node_mem;
+}
+#if 1
+  void HybridFA::dumpmem(char* fname){
+      //NFA state id rearrange(from 0 to n-1)
+    int nfasize =  rearrange_nfaids();
+
+    FILE* fp = fopen(fname, "w");
+    int nfaset_off = 0;//record how many slots needed by nfa_nfaset
+    int accept_node_offset = 0;//record how many accept nodes
+
+    //dump NFA state && accept node slots && caclulate nfaset slots
+    void *n_nfaset_mem;
+    void* nfa_mem = dumpnfa(nfasize, accept_node_offset, nfaset_off);
+    fprintf(fp, "nfa_mem %d\n", nfasize);
+    fwrite(nfa_mem, sizeof(nfa_mem_block), nfasize, fp);
+
+    //dump DFA state && calculate accept node slots && calculate border nfaset slots
+    int dfa_size = head->size();
+    void* dfa_mem = dumphead(accept_node_offset, nfaset_off);
+    fprintf(fp, "dfa_mem %d\n", dfa_size);
+    fwrite(dfa_mem, sizeof(dfa_mem_block), dfa_size, fp);
+
+    //dump nfaset (including nfa state --> nfaset && border state --> nfaset)
+    void* nfaset_mem = dumpnfaset(nfaset_off);
+    fprintf(fp, "nfaset_mem %d\n", nfaset_off);
+    fwrite(nfaset_mem, sizeof(state_t), nfaset_off, fp);
+
+    //dump accept node
+    void* acceptnode_mem = dumpaccept(accept_node_offset);
+    fprintf(fp, "node_mem %d\n", accept_node_offset);
+    fwrite(acceptnode_mem, sizeof(node_set_app_id_and_aging), accept_node_offset, fp);
+
+    //free
+    free(dfa_mem);
+    free(nfa_mem);
+    free(nfaset_mem);
+    free(acceptnode_mem);
+    fclose(fp);
+}
+#else
+void HybridFA::dumpmem(char* fname){
+    //rearrange NFA ids
+    rearrange_nfaids();
+
+    //dump accept info
+    int accept_node_size = 0;
+
+    //dump head dfa (dfa_mem)
+    state_t dfastate = 0;
+    dfa_mem_block* dfa_mem = (dfa_mem_block*) malloc(sizeof(dfa_mem_block) * head->size());
+    memset(dfa_mem, 0, sizeof(dfa_mem_block) * head->size());
+    state_t** stt = head->get_state_table();
+    for(; dfastate < head->size(); dfastate++){
+        memcpy(dfa_mem[dfastate].nextstates, stt[dfastate], ALPHABET_SIZE * sizeof(state_t));
+        //do accept later
+        linked_set *accepted_rules = head->accepts(dfastate);
+        accept_node_size += accepted_rules->size();
+        //accept_node_size += head->accepts(dfastate)->size();
+    }
+
+    //dump tail nfa (nfa_mem)
+    int nfasize = 0;
+    FOREACH_LIST(nfaList, it){
+        printf("nfa pattern: %s\n", (*it)->pattern);
+        nfasize += (*it)->size();
+    }
+    nfa_mem_block* nfa_mem = (nfa_mem_block*) malloc(sizeof(nfa_mem) * nfasize);
+    /*nfa id 是否正确， 待验证 todo*/
+    //int total_id = 0;
+    int nfaset_offset = 0; //nfastate 指向的nfaset 偏移
+    FOREACH_LIST(nfaList, it){
+        //NFA* nfa = (*it);
+        //debug print
+        printf("nfa pattern: %s\n", (*it)->pattern);
+        nfa_list *ptr_nfas = new nfa_list();
+        (*it)->traverse(ptr_nfas);
+        //nfa_list *ptr_nfas=&nfas;
+        FOREACH_LIST(ptr_nfas, it2){
+            accept_node_size += (*it2)->get_accepting()->size();
+            int id = (*it2)->id;
+            for(int c=0; c<ALPHABET_SIZE; c++){
+                nfa_set* nfaSet = (*it2)->get_transitions(c);
+                if(nfaSet == NULL) {
+                    nfa_mem[id].nextstates_offset[c] = VALUE_NULL;
+                    continue;
+                }
+                nfa_mem[id].nextstates_offset[c] = nfaset_offset;
+                nfaset_offset += nfaSet->size();
+                nfaset_offset += 1;//one slot indicating the end of one set
+                delete nfaSet;
+            }
+        }
+        delete ptr_nfas;
+        /*
+        nfa->get_id2state();
+        for(int i=0; i<(nfa->size()); i++){
+            int id = total_id + i; //id in nfa_mem
+            NFA* nfastate = nfa->id2state[i];
+            nfastate->glb_id = id;
+            for(int c=0; c<ALPHABET_SIZE; c++){
+                nfa_set* nfaSet = nfastate->get_transitions(c);
+                if(nfaSet == NULL) {
+                    nfa_mem[id].nextstates_offset[c] = VALUE_NULL;
+                    continue;
+                }
+                nfa_mem[id].nextstates_offset[c] = nfaset_offset;
+                nfaset_offset += nfaSet->size();
+                nfaset_offset += 1;//one slot indicating the end of one set
+            }
+            accept_node_size += nfastate->get_accepting()->size();
+        }
+        total_id += nfa->size();*/
+    }
+
+    //dump border
+    map<state_t, nfa_set*>::iterator map_it = border->begin();
+    while(map_it != border->end()){
+        dfa_mem[map_it->first].offset_to_nfaset = nfaset_offset;
+        nfaset_offset += map_it->second->size();
+        nfaset_offset += 1;//one slot indicating the end of one set
+        map_it++;
+    }
+
+    /*second round: fullfil nfaset(nfaset_mem) && accept(node_mem)*/
+
+    unsigned int* nfaset_mem = (unsigned int*) malloc(sizeof(state_t) * nfaset_offset);
+    node_set_app_id_and_aging* node_mem = (node_set_app_id_and_aging*) malloc(sizeof(node_set_app_id_and_aging) * accept_node_size);
+
+    //dfa accept
+    dfastate = 0;
+    accept_node_size = 0;
+    for(; dfastate < head->size(); dfastate++){
+        linked_set *accepted_rules = head->accepts(dfastate);
+        if(accepted_rules->size() == 0) continue;
+        if(accepted_rules->size() > 15)
+        {
+            printf("accepted rule num > 15 in one state!\n");
+            exit(-1);
+        }
+        dfa_mem[dfastate].stateaccepts.accept_num = accepted_rules->size();
+        dfa_mem[dfastate].stateaccepts.accept_offset = accept_node_size;
+        int acc_size = accepted_rules->size();
+        for(int i=accept_node_size; i<accept_node_size+acc_size; i++){
+            node_mem[i].app_id = accepted_rules->value();
+            accepted_rules = accepted_rules->succ();
+        }
+        accept_node_size += acc_size;
+    }
+
+    //nfa nfaset && accept
+    nfaset_offset = 0; //nfastate 指向的nfaset 偏移
+    FOREACH_LIST(nfaList, it){
+        NFA* nfa = (*it);
+        nfa_list nfas;
+        (*it)->traverse(&nfas);
+        nfa_list *ptr_nfas=&nfas;
+        FOREACH_LIST(ptr_nfas, it2) {
+            int id = (*it2)->id;
+            for(int c=0; c<ALPHABET_SIZE; c++){
+                nfa_set* nfaSet = (*it2)->get_transitions(c);
+                if(nfaSet == NULL) continue;
+                FOREACH_SET(nfaSet, it3){
+                    nfaset_mem[nfaset_offset++] = (*it3)->id;
+                }
+                nfaset_mem[nfaset_offset++] = VALUE_END;
+            }
+            linked_set* accepting_rules = (*it2)->get_accepting();
+            int acc_size = accepting_rules->size();
+            if(acc_size == 0) continue;
+            if(acc_size > 15) {
+                printf("accepted rule num > 15 in one state!\n");
+                exit(-1);
+            }
+            nfa_mem[id].stateaccepts.accept_num = acc_size;
+            nfa_mem[id].stateaccepts.accept_offset = accept_node_size;
+            for(int i=accept_node_size; i<accept_node_size+acc_size; i++){
+                node_mem[i].app_id = accepting_rules->value();
+                accepting_rules = accepting_rules->succ();
+            }
+            accept_node_size += acc_size;
+        }
+        /*
+        for(int i=0; i<(nfa->size()); i++){
+            int id = total_id + i; //id in nfa_mem
+            NFA* nfastate = nfa->id2state[i];
+            for(int c=0; c<ALPHABET_SIZE; c++){
+                nfa_set* nfaSet = nfastate->get_transitions(c);
+                if(nfaSet == NULL) continue;
+                //nfa_mem[id].nextstates_offset[c] = nfaset_offset;
+                FOREACH_SET(nfaSet, it){
+                    nfaset_mem[nfaset_offset++] = (*it)->id;
+                }
+                nfaset_mem[nfaset_offset++] = VALUE_END;
+            }
+            linked_set* accepting_rules = nfastate->get_accepting();
+            int acc_size = accepting_rules->size();
+            if(acc_size == 0) continue;
+            if(acc_size > 15) {
+                printf("accepted rule num > 15 in one state!\n");
+                exit(-1);
+            }
+            nfa_mem[id].stateaccepts.accept_num = acc_size;
+            nfa_mem[id].stateaccepts.accept_offset = accept_node_size;
+            for(int i=accept_node_size; i<accept_node_size+acc_size; i++){
+                node_mem[i].app_id = accepting_rules->value();
+                accepting_rules = accepting_rules->succ();
+            }
+            accept_node_size += acc_size;
+        }
+        total_id += nfa->size();*/
+    }
+    //border nfaset
+    map_it = border->begin();
+    while(map_it != border->end()){
+        nfa_set* nfaSet = map_it->second;
+        FOREACH_SET(nfaSet, it){
+            nfaset_mem[nfaset_offset++] = (*it)->id;
+        }
+        nfaset_mem[nfaset_offset++] = VALUE_END;
+        map_it++;
+    }
+
+    //dump to file
+    FILE* fdump = fopen(fname, "w");
+    //fprintf(fdump, "dfa_mem %d\n", head->size());
+    int headsize = head->size();
+    fwrite(&headsize, sizeof(int), 1, fdump);
+    fwrite(dfa_mem, sizeof(dfa_mem_block), head->size(), fdump);
+    fprintf(fdump, "nfa_mem %d\n", nfasize);
+    fwrite(nfa_mem, sizeof(nfa_mem_block), nfasize, fdump);
+    fprintf(fdump, "nfaset_mem %d\n", nfaset_offset);
+    fwrite(nfaset_mem, sizeof(unsigned int), nfaset_offset, fdump);
+    fprintf(fdump, "node_mem %d\n", accept_node_size);
+    fwrite(node_mem, sizeof(node_set_app_id_and_aging), accept_node_size, fdump);
+    fclose(fdump);
+
+    //free
+    free(dfa_mem);
+    free(nfa_mem);
+    free(nfaset_mem);
+    free(node_mem);
+}
+#endif

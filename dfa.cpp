@@ -74,6 +74,8 @@ DFA::DFA(unsigned N, bool flag_in){
     }
     else mask_table = NULL;
 
+    //for hfa hm construction
+    border = new map <state_t, nfa_set*>();
 }
 
 DFA::~DFA(){
@@ -102,6 +104,7 @@ DFA::~DFA(){
         free(mask_table);
     }
 
+    if(border != NULL) delete (map<state_t, nfa_set*> *) border;
 }
 
 
@@ -150,6 +153,7 @@ state_t DFA::add_state(){
 	if (state==NO_STATE)
 		fatal("DFA:: add_state(): too many states!");
 	if (state >= entry_allocated){
+    //if (state >= entry_allocated-5){
 		entry_allocated += MAX_DFA_SIZE_INCREMENT;
 		state_table = reallocate_state_matrix(state_table,entry_allocated);
         //mask_table = reallocate_byte_matrix(mask_table,entry_allocated);
