@@ -442,18 +442,39 @@ HybridFA::HybridFA(nfa_list *ptr_nfalist){
     int dit = 0;
     int size = ptr_nfalist->size();
     nfaList = new nfa_list();
-    FOREACH_LIST(ptr_nfalist, it){
+    NFA** nfa_arr = (NFA**) malloc(sizeof(NFA*) * (size + 5));
+    int tmpid = 0;
+    FOREACH_LIST(ptr_nfalist, it) {
+        nfa_arr[tmpid++] = (*it);
+    }
+#pragma omp parallel for default(shared)
+    //FOREACH_LIST(ptr_nfalist, it){
+    for(int i=0; i<size; i++){
+        NFA* itnfa = nfa_arr[i];
         //if(dit%20 == 0) fprintf(stderr, "remove_epsilon: %d/%d\n", dit, size);
-        fprintf(stderr, "pattern: %s\n", (*it)->pattern);
+#pragma omp critical (section0)
+        {
+        //fprintf(stderr, "pattern: %s\n", (*it)->pattern);
+        fprintf(stderr, "pattern: %s\n", itnfa->pattern);
         fprintf(stderr, "remove_epsilon: %d/%d\n", dit, size);
         dit++;
-        (*it)->remove_epsilon();
-        (*it)->reset_state_id();
+        }
+        //(*it)->remove_epsilon();
+        //(*it)->reset_state_id();
+        itnfa->remove_epsilon();
+        itnfa->reset_state_id();
         //(*it)->reset_state_id(newid);
-        newid += (*it)->size();
-        (*it)->set_depth();
-        nfaList->push_back((*it));
+        //newid += (*it)->size();
+        //(*it)->set_depth();
+        newid += itnfa->size();
+        itnfa->set_depth();
+#pragma omp critical (section1)
+        {
+        //nfaList->push_back((*it));
+        nfaList->push_back(itnfa);
+        }
     }
+    free(nfa_arr);
     fprintf(stderr, "\n");
     nfa = NULL;//todo, may affect trace
     //non_special = new nfa_set();
@@ -1325,11 +1346,15 @@ void HybridFA::minimize() {
 
 void* HybridFA::dumphead(int &accept_node_offset, int &nfaset_off){
     dfa_mem_block* dfa_mem = (dfa_mem_block*) malloc(sizeof(dfa_mem_block) * head->size());
+    if(dfa_mem == NULL){
+        printf("memory malloc failed.\n");
+        return NULL;
+    }
 
     state_t** stt = head->get_state_table();
     for(int state=0; state < head->size(); state++){
         memcpy(dfa_mem[state].nextstates, stt[state], sizeof(state_t)*ALPHABET_SIZE);
-        assert(head->accepts(state)->size() < 16); //maximum accept rules supported by one node
+        //assert(head->accepts(state)->size() < 16); //maximum accept rules supported by one node
         dfa_mem[state].stateaccepts.accept_num = head->accepts(state)->size();
         dfa_mem[state].stateaccepts.accept_offset = accept_node_offset;
         accept_node_offset += head->accepts(state)->size();
@@ -1341,6 +1366,7 @@ void* HybridFA::dumphead(int &accept_node_offset, int &nfaset_off){
         else{
             dfa_mem[state].offset_to_nfaset = nfaset_off;
             nfaset_off += mapit->second->size();
+            nfaset_off++; //one slot indicating end
         }
     }
 
@@ -1365,7 +1391,7 @@ void* HybridFA::dumpnfa(int nfasize, int &accept_node_offset, int &nfaset_offset
         }
 
         linked_set* accept_rules = (*it)->get_accepting();
-        assert(accept_rules->size() < 16);
+        //assert(accept_rules->size() < 16);
         nfa_mem[nfa_id].stateaccepts.accept_num = accept_rules->size();
         accept_node_offset += accept_rules->size();
     }
@@ -1376,6 +1402,10 @@ void* HybridFA::dumpnfaset(int nfaset_offset){
     //todo
     state_t *nfaset_mem = (state_t *) malloc(sizeof(state_t) * nfaset_offset);
 
+    if(nfaset_mem == NULL) {
+        printf("malloc memory block falied.\n");
+        return NULL;
+    }
     nfaset_offset = 0;
     //nfa nfaset
     FOREACH_LIST(nfaList, it) {
@@ -1456,6 +1486,7 @@ void* HybridFA::dumpaccept(int accept_node_offset){
     fwrite(dfa_mem, sizeof(dfa_mem_block), dfa_size, fp);
 
     //dump nfaset (including nfa state --> nfaset && border state --> nfaset)
+    printf("nfaset_size:%d\n", nfaset_off);
     void* nfaset_mem = dumpnfaset(nfaset_off);
     fprintf(fp, "nfaset_mem %d\n", nfaset_off);
     fwrite(nfaset_mem, sizeof(state_t), nfaset_off, fp);

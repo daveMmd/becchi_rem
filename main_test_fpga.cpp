@@ -1,8 +1,7 @@
 //
-// Created by 钟金诚 on 2020/5/16.
-// main entry file to test hfa (change the construct)
+// Created by 钟金诚 on 2020/7/13.
+//
 
-#include <sys/time.h>
 #include "stdinc.h"
 #include "nfa.h"
 #include "dfa.h"
@@ -10,7 +9,19 @@
 #include "hybrid_fa.h"
 #include "parser.h"
 #include "trace.h"
-#include "hfadump.h"
+#include "Fb_DFA.h"
+
+/*
+ * Program entry point.
+ * Please modify the main() function to add custom code.
+ * The options allow to create a DFA from a list of regular expressions.
+ * If a single single DFA cannot be created because state explosion occurs, then a list of DFA
+ * is generated (see MAX_DFA_SIZE in dfa.h).
+ * Additionally, the DFA can be exported in proprietary format for later re-use, and be imported.
+ * Moreover, export to DOT format (http://www.graphviz.org/) is possible.
+ * Finally, processing a trace file is an option.
+ */
+
 
 #ifndef CUR_VER
 #define CUR_VER		"Michela  Becchi 1.4.1"
@@ -172,6 +183,21 @@ void check_file(char *filename, char *mode){
     }else fclose(file);
 }
 
+void calc_range_edge(DFA* dfa){
+    state_t ** stt = dfa->get_state_table();
+    int dfa_size = dfa->size();
+    for(int i=0; i<dfa_size; i++){
+        printf("*****state:%d*****\n", i);
+        int pre = 0;
+        for(int j=1; j<256; j++){
+            if(stt[i][j] != stt[i][j-1]){
+                printf("%d-%d:%d\n", pre, j-1, stt[i][j-1]);
+                pre = j;
+            }
+        }
+        printf("%d-%d:%d\n", pre, 255, stt[i][255]);
+    }
+}
 
 /*
  *  MAIN - entry point
@@ -183,7 +209,8 @@ int main(int argc, char **argv){
     while(!parse_arguments(argc,argv)) usage();
     print_conf();
     VERBOSE=config.verbose;
-    DEBUG=config.debug; if (DEBUG) VERBOSE=1;
+    DEBUG=config.debug;
+    if (DEBUG) VERBOSE=1;
 
     //check that it is possible to open the files
     if (config.regex_file!=NULL) check_file(config.regex_file,"r");
@@ -203,7 +230,6 @@ int main(int argc, char **argv){
     /* FA declaration */
     NFA *nfa=NULL;  	// NFA
     DFA *dfa=NULL;		// DFA
-    HybridFA *hfa=NULL; // Hybrid-FA
 
     // if regex file is provided, parses it and instantiate the corresponding NFA.
     // if feasible, convert the NFA to DFA
@@ -211,96 +237,63 @@ int main(int argc, char **argv){
         FILE *regex_file=fopen(config.regex_file,"r");
         fprintf(stderr,"\nParsing the regular expression file %s ...\n",config.regex_file);
         regex_parser *parse=new regex_parser(config.i_mod,config.m_mod);
-
-        struct timeval start,end;
-        gettimeofday(&start, NULL);
-
-        int no_use;
-        printf("before parse_to_list_mp\n");
-        nfa_list *ptr_nfalist = parse->parse_to_list_mp(regex_file, &no_use);
-
-        gettimeofday(&end, NULL);
-        long timeuse =1000000 * ( end.tv_sec - start.tv_sec ) + end.tv_usec - start.tv_usec;
-        printf("regexs to nfa time=%f\n",timeuse /1000000.0);
-
+        list<NFA *>* nfa_list = NULL;
+        int size;
+        printf("parsing res to NFAs.\n");
+        nfa_list = parse->parse_to_list_mp(regex_file, &size);
         fclose(regex_file);
         delete parse;
-        printf("before new hybridFA\n");
-        hfa = new HybridFA(ptr_nfalist);
 
-        gettimeofday(&end, NULL);
-        timeuse =1000000 * ( end.tv_sec - start.tv_sec ) + end.tv_usec - start.tv_usec;
-        printf("finish constructing hfa, cost time=%f\n",timeuse /1000000.0);
+        printf("NFA2DFAing...\n");
+        //vector<int> dfa_sizes;
+        FILE* ftarge = fopen("./static.txt", "w");
+        vector<pair<int, char*>> dfa_sizes_patterns;
+        for(int i = 0; i < size; i++){
+            printf("%d/%d\n", i, size);
+            nfa = nfa_list->front();
+            nfa_list->pop_front();
+            nfa->remove_epsilon();
+            nfa->reduce();
+            dfa=nfa->nfa2dfa();
+            if (dfa==NULL) printf("Max DFA size %ld exceeded during creation: the DFA was not generated\n",MAX_DFA_SIZE);
+            else {
+                dfa->minimize();
+                //calc_range_edge(dfa);
+                printf("now processing re: %s\n", nfa->pattern);
+                printf("8-bit DFA size:%d\n", dfa->size());
 
-        //dump hfa
-        hfa->dumpmem("./hfa.mem");
-        printf("Successfully dump hfa.\n");
+                //debug
+                /*FILE* file = fopen("./8dfa.dot", "w");
+                dfa->to_dot(file, "8dfa");
+                fclose(file);*/
 
-        //free nfa-list
-        delete ptr_nfalist;
-        delete hfa;
-    }
-    //exit(0);
-
-    read_mem("./hfa.mem");
-
-    unsigned char teststring[50] = "abcdabcdaefgsdsdwfabfg";
-    mem_search_hfa(teststring, 50);
-    exit(0);
-
-    //test init hfa
-    if (config.regex_file!=NULL){
-        FILE *regex_file=fopen(config.regex_file,"r");
-        fprintf(stderr,"\nParsing the regular expression file %s ...\n",config.regex_file);
-        regex_parser *parse=new regex_parser(config.i_mod,config.m_mod);
-
-        struct timeval start,end;
-        gettimeofday(&start, NULL);
-
-        NFA *nfa = parse->parse(regex_file);
-        fclose(regex_file);
-        delete parse;
-        hfa = new HybridFA(nfa);
-
-        gettimeofday(&end, NULL);
-        long timeuse =1000000 * ( end.tv_sec - start.tv_sec ) + end.tv_usec - start.tv_usec;
-        printf("time=%f\n",timeuse /1000000.0);
-        //traverse
-        trace *tr=new trace("./test_trace");
-        tr->traverse(hfa);
-
-        //free nfa-list
-        delete nfa;
-        delete hfa;
-    }
-
-    exit(0);
-
-    // HFA generation
-    if (config.hfa){
-        if (nfa==NULL) fatal("Impossible to build a Hybrid-FA if no NFA is given.");
-        hfa=new HybridFA(nfa);
-        if (hfa->get_head()->size()<100000) hfa->minimize();
-        printf("HFA:: head size=%d, tail size=%d, number of tails=%d, border size=%d\n",hfa->get_head()->size(),hfa->get_tail_size(),hfa->get_num_tails(),hfa->get_border()->size());
-    }
-
-    // trace file traversal
-    if (config.trace_file){
-        trace *tr=new trace(config.trace_file);
-        if (nfa!=NULL) tr->traverse(nfa);
-        if (dfa!=NULL){
-            tr->traverse(dfa);
-            if (dfa->get_default_tx()!=NULL) tr->traverse_compressed(dfa);
+                //dfa_sizes.push_back(dfa->size());
+                Fb_DFA* fdfa = new Fb_DFA(dfa);
+                //fdfa->to_dot("./4dfa.dot", "4dfa"); //debug
+                Fb_DFA* minimum_dfa = fdfa->minimise();
+                printf("4-bit DFA size:%d\n", minimum_dfa->size());
+                //minimum_dfa->to_dot("./4dfa-m.dot", "4dfa");
+                int cnt_less2 = minimum_dfa->less2states();
+                int cnt_cons2 = minimum_dfa->cons2states();
+                fprintf(ftarge, "\n%d %d %d %d\n%s", dfa->size(), minimum_dfa->size(), cnt_less2, cnt_cons2, nfa->pattern);
+                delete fdfa;
+                delete minimum_dfa;
+                dfa_sizes_patterns.push_back(make_pair(dfa->size(), nfa->pattern));
+            }
+            delete nfa;
+            if(dfa != NULL) delete dfa;
         }
-        if (hfa!=NULL) tr->traverse(hfa);
-        delete tr;
+        fclose(ftarge);
+        //sort dfa_sizes
+        //sort(dfa_sizes.begin(), dfa_sizes.end());
+#if 0
+        sort(dfa_sizes_patterns.begin(), dfa_sizes_patterns.end(), greater<pair<int, char*>>());
+        for(int i = 0; i < size; i++){
+            //printf("%d\n", dfa_sizes[i]);
+            printf("%d %s\n", dfa_sizes_patterns[i].first, dfa_sizes_patterns[i].second);
+        }
+#endif
     }
-
-    /* Automata de-allocation */
-
-    if (nfa!=NULL) delete nfa;
-    if (dfa!=NULL) delete dfa;
-    if (hfa!=NULL) delete hfa;
 
     return 0;
 

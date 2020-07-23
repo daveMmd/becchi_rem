@@ -40,3 +40,7 @@ add_executable(regex_dave ${stdinc} ${int_set} ${linked_set} ${partition} ${wgra
 add_executable(test_dave test_dave.cpp)
 
 add_executable(regex_hfa ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} main_testhfa.cpp ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp hierarMerging.cpp dave_nfa.cpp hfadump.cpp set.cpp)
+
+#test for fpga (multi-DFA)
+#add_executable(test_fpga ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} main_test_fpga.cpp ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp)
+add_executable(test_fpga ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} main_test_fpga.cpp ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp hierarMerging.cpp dave_nfa.cpp hfadump.cpp set.cpp Fb_DFA.cpp Fb_DFA.h Fb_NFA.cpp Fb_NFA.h)

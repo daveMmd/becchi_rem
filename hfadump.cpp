@@ -90,7 +90,9 @@ int mem_search_hfa(unsigned char* str, int n)
         //traverse next states
         for(int i=0; i<currentstates_size; i++){
             state_t ns = nfa_currentstates[i];
-            int offset = ((nfa_mem_block*) nfa_mem[ns])->nextstates_offset[*c];
+            //int offset = ((nfa_mem_block*) nfa_mem[ns])->nextstates_offset[*c];
+            nfa_mem_block* nfa_block =  (nfa_mem_block*) nfa_mem + ns;
+            int offset =nfa_block->nextstates_offset[*c];
             if(offset == VALUE_NULL) continue;
             while(((int*)nfaset_mem)[offset] != VALUE_END)
             {

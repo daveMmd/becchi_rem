@@ -54,6 +54,7 @@
 #include "dfa.h"
 #include "nfa.h"
 #include "dheap.h"
+#include "Fb_DFA.h"
 #include <set>
 
 using namespace std;
@@ -84,6 +85,7 @@ public:
 	// returns true if the subset (for nfaid_sets) was preesisting, and false if not. In the latter
 	// case, a new DFA state is created
 	bool lookup(set <state_t> *nfaid_set, DFA *dfa, state_t *dfa_id);
+    bool lookup(set <state_t> *nfaid_set, Fb_DFA *dfa, state_t *dfa_id);
 	
 	// For NFA reduction:
 	// - queries a subset

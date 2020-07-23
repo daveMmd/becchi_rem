@@ -702,6 +702,7 @@ list<NFA *> *regex_parser::parse_to_list_mp(FILE *file, int *size) {
             re= regex_list.front();
             regex_list.pop_front();
         }
+        //printf("now processing re: %s\n", re);
 
         NFA* nfa = new NFA();
         NFA *non_anchored = nfa->add_epsilon(); // for .* RegEx

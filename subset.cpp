@@ -56,6 +56,45 @@ subset::~subset(){
 }
 
 
+//version for Fb_dfa construct
+bool subset::lookup(set <state_t> *nfaid_set, Fb_DFA *dfa, state_t *dfaid){
+
+    if (nfaid_set->empty()) nfaid_set->insert(NO_STATE); //this to consider the case of emptyset.
+    state_t id = *(nfaid_set->begin());
+    if (id==nfa_id){
+        nfaid_set->erase(nfaid_set->begin());
+        if(nfaid_set->empty()){
+            if (dfa_id==NO_STATE){
+                dfa_id=dfa->add_state();
+                *dfaid=dfa_id;
+                return false;
+            }else{
+                *dfaid=dfa_id;
+                return true;
+            }
+        }else{
+            id = *(nfaid_set->begin());
+            if (next_o==NULL){
+                next_o=new subset(id);
+            }else if (next_o->nfa_id>id){
+                subset *new_node=new subset(id);
+                new_node->next_v=next_o;
+                next_o=new_node;
+            }
+            return next_o->lookup(nfaid_set, dfa, dfaid);
+        }
+    }else if (id>nfa_id){
+        if (next_v==NULL || id<next_v->nfa_id){
+            subset *new_node=new subset(id);
+            new_node->next_v=next_v;
+            next_v=new_node;
+        }
+        return next_v->lookup(nfaid_set,dfa,dfaid);
+    }else{
+        fatal("subset::lookup: condition should never occur");
+    }
+
+}
 
 //version used in subset construction
 bool subset::lookup(set <state_t> *nfaid_set, DFA *dfa, state_t *dfaid){

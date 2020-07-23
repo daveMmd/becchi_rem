@@ -69,7 +69,8 @@
 #define CHAR_BIRMAP_SIZE 32 //BITMAP bit lenght
 
 /* DFA contruction */
-#define MAX_DFA_SIZE 4294967295 //max size of a DFA
+//#define MAX_DFA_SIZE 4294967295 //max size of a DFA
+#define MAX_DFA_SIZE 10000 //max size of a DFA
 
 
 /* type definitions: state identifiers and symbols */
