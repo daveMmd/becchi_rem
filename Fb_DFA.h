@@ -11,6 +11,7 @@
 
 class Fb_DFA {
 private:
+    int cons2state_num;
     int entry_allocated;
 public:
     state_t **state_table;
@@ -30,6 +31,12 @@ public:
     int size();
     int less2states();
     int cons2states();
+    int get_large_states_num();
+
+    Fb_DFA* converge(Fb_DFA *);
+    bool small_enough();
+
+    float get_ratio();
 };
 
 

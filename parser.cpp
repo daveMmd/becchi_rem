@@ -315,13 +315,13 @@ dfa_set *regex_parser::parse_to_dfa(FILE *file){
 		int max=(queue->front()).second;
 		queue->pop_front();
 		NFA *nfa=parse(file,min,max);
-		nfa->remove_epsilon();
-		nfa->reduce();
+		//nfa->remove_epsilon();
+		//nfa->reduce();
 		DFA *dfa=nfa->nfa2dfa();
 		delete nfa;
 		if (dfa!=NULL){
 			if (VERBOSE) printf("DFA created for regex %ld to %ld\n",min,max);
-			dfa->minimize();
+			//dfa->minimize();
 			dfas->insert(dfa);
 		}
 		else{
@@ -366,7 +366,7 @@ void *regex_parser::parse_re(NFA* nfa, const char *re, bool singleNfa){
 		tilde_re=true;
 		ptr++;
 	}
-	NFA *fa=parse_re(re,&ptr,false);
+	NFA *fa=parse_re(re, &ptr, false);
 	fa->get_last()->accept();
 	if (!tilde_re){ 
 		non_anchored->add_epsilon(fa->get_first());
@@ -731,4 +731,73 @@ list<NFA *> *regex_parser::parse_to_list_mp(FILE *file, int *size) {
     }
 
     return nfa_list;
+}
+
+list<NFA *> *regex_parser::parse_to_list_from_regexlist(list<char*> *regex_list) {
+    list<NFA *>* nfa_list = new list<NFA *>();
+    int size = regex_list->size();
+
+    //compiling RegExes to NFAs
+#pragma omp parallel for default(shared)
+    for(int i=0; i < size; i++){
+        char* re;
+#pragma omp critical (section_1)
+        {
+            re= regex_list->front();
+            regex_list->pop_front();
+        }
+        //printf("now processing re: %s\n", re);
+
+        NFA* nfa = new NFA();
+        NFA *non_anchored = nfa->add_epsilon(); // for .* RegEx
+        NFA *anchored = nfa->add_epsilon(); // for anchored RegEx (^)
+        parse_re(nfa, re, true);
+        //handle -m modifier
+        if (m_modifier && (!anchored->get_epsilon()->empty() || !anchored->get_transitions()->empty())){
+            non_anchored->add_transition('\n',anchored);
+            non_anchored->add_transition('\r',anchored);
+        }
+
+        //delete non_anchored, if necessary
+        if(non_anchored->get_epsilon()->empty() && non_anchored->get_transitions()->empty()){
+            nfa->get_epsilon()->remove(non_anchored);
+            delete non_anchored;
+        }else{
+            non_anchored->add_any(non_anchored);
+        }
+
+#pragma omp critical (section_2)
+        {
+            nfa->get_first()->pattern = re;
+            nfa_list->push_back(nfa->get_first());
+        }
+        //free(re);
+    }
+
+    return nfa_list;
+}
+
+NFA *regex_parser::parse_from_regex(char *re) {
+    NFA* nfa = new NFA();
+    NFA *non_anchored = nfa->add_epsilon(); // for .* RegEx
+    NFA *anchored = nfa->add_epsilon(); // for anchored RegEx (^)
+    parse_re(nfa, re, true);
+    //handle -m modifier
+    if (m_modifier && (!anchored->get_epsilon()->empty() || !anchored->get_transitions()->empty())){
+        non_anchored->add_transition('\n',anchored);
+        non_anchored->add_transition('\r',anchored);
+    }
+
+    //delete non_anchored, if necessary
+    if(non_anchored->get_epsilon()->empty() && non_anchored->get_transitions()->empty()){
+        nfa->get_epsilon()->remove(non_anchored);
+        delete non_anchored;
+    }else{
+        non_anchored->add_any(non_anchored);
+    }
+
+    //nfa->get_first()->pattern = re;
+    nfa->get_first()->pattern = (char*) malloc(1000);
+    strcpy(nfa->get_first()->pattern, re);
+    return nfa->get_first();
 }

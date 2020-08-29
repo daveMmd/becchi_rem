@@ -199,6 +199,59 @@ void calc_range_edge(DFA* dfa){
     }
 }
 
+int cmp(const void* p1, const void* p2){
+    Fb_DFA *dfa1 = *(Fb_DFA **)p1;
+    Fb_DFA *dfa2 = *(Fb_DFA **)p2;
+    return dfa2->size() - dfa1->size();
+}
+/*
+ * 1.first group largest dfa(with most dfa states)
+ * 2.try to converge as many small dfa as possible
+ * 3.guarantee worst run time
+ * */
+void greedy_group(list<Fb_DFA *> *dfa_lis){
+    /*sort dfa according size*/
+    Fb_DFA *tem_lis[5000];
+    int cnt=0;
+    for(list<Fb_DFA*>::iterator it = dfa_lis->begin(); it != dfa_lis->end(); it++) tem_lis[cnt++] = *it;
+    qsort(tem_lis, cnt, sizeof(Fb_DFA*), cmp);
+    //debug
+    for(int i=0; i<cnt; i++) printf("%d ", tem_lis[i]->size());
+    printf("\n");
+
+    Fb_DFA* target_dfas[5000];/*save generated DFA*/
+    memset(target_dfas, 0, sizeof(Fb_DFA*) * 5000);
+    int res_cnt = 0;
+    int beg = 0, end = cnt;
+    for(int i = beg; i < end; i++){
+        Fb_DFA* dfa = tem_lis[i];
+        if(dfa == NULL) continue;/*have been converged*/
+        /*ensure dfa can be put into FPGA alone*/
+        if(!dfa->small_enough()){
+            printf("dfa #%d cannot be put into FPGA alone!\n", i);
+            delete dfa;
+            continue;
+        }
+        /*converge small dfa first*/
+        for(int j = end - 1; j > i; j--){
+            if(tem_lis[j] == NULL) continue;
+            Fb_DFA* dfa2 = tem_lis[j];
+            Fb_DFA* new_dfa = dfa->converge(dfa2);
+            if(new_dfa != NULL){
+                delete dfa2;
+                tem_lis[j] = NULL;
+                delete dfa;
+                dfa = new_dfa;
+            }
+        }
+        target_dfas[res_cnt++] = dfa;
+    }
+
+    printf("target dfa number:%d\n", res_cnt);
+    for(int i = 0; i < res_cnt; i++) {
+        printf("#%d dfa size: %d\n", i, target_dfas[i]->size());
+    }
+}
 /*
  *  MAIN - entry point
  */
@@ -246,8 +299,9 @@ int main(int argc, char **argv){
 
         printf("NFA2DFAing...\n");
         //vector<int> dfa_sizes;
-        FILE* ftarge = fopen("./static.txt", "w");
-        vector<pair<int, char*>> dfa_sizes_patterns;
+        //FILE* ftarge = fopen("./static.txt", "w");
+        //vector<pair<int, char*>> dfa_sizes_patterns;
+        list<Fb_DFA *> *fb_dfa_lis = new list<Fb_DFA *>();
         for(int i = 0; i < size; i++){
             printf("%d/%d\n", i, size);
             nfa = nfa_list->front();
@@ -273,17 +327,21 @@ int main(int argc, char **argv){
                 Fb_DFA* minimum_dfa = fdfa->minimise();
                 printf("4-bit DFA size:%d\n", minimum_dfa->size());
                 //minimum_dfa->to_dot("./4dfa-m.dot", "4dfa");
-                int cnt_less2 = minimum_dfa->less2states();
-                int cnt_cons2 = minimum_dfa->cons2states();
-                fprintf(ftarge, "\n%d %d %d %d\n%s", dfa->size(), minimum_dfa->size(), cnt_less2, cnt_cons2, nfa->pattern);
+                //int cnt_less2 = minimum_dfa->less2states();
+                //int cnt_cons2 = minimum_dfa->cons2states();
+                //fprintf(ftarge, "\n%d %d %d %d\n%s", dfa->size(), minimum_dfa->size(), cnt_less2, cnt_cons2, nfa->pattern);
                 delete fdfa;
-                delete minimum_dfa;
-                dfa_sizes_patterns.push_back(make_pair(dfa->size(), nfa->pattern));
+                fb_dfa_lis->push_back(minimum_dfa);
+                //delete minimum_dfa;
+                //dfa_sizes_patterns.push_back(make_pair(dfa->size(), nfa->pattern));
             }
             delete nfa;
             if(dfa != NULL) delete dfa;
         }
-        fclose(ftarge);
+        greedy_group(fb_dfa_lis);
+        //for(list<Fb_DFA*>::iterator it = fb_dfa_lis->begin(); it != fb_dfa_lis->end(); it++) delete *it;
+        delete fb_dfa_lis;
+        //fclose(ftarge);
         //sort dfa_sizes
         //sort(dfa_sizes.begin(), dfa_sizes.end());
 #if 0

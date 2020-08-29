@@ -44,6 +44,7 @@
 
 #include <set>
 #include <iterator>
+#include <iostream>
 
 using namespace std;
 
@@ -1113,4 +1114,218 @@ void trace::traverse_nfa(fa_memory *mem, double *data){
 	delete [] depth_stats;		
 	delete accepted_rules;
 	delete queue;
+}
+
+bool trace::pre_match(prefix_DFA *prefixDfa, match_statics* statics, FILE *stream){
+    //no pre re part
+    if(prefixDfa->parent_node == nullptr) return true;
+
+    fpos_t pos_origin;
+    int res;
+    fgetpos(tracefile, &pos_origin);
+
+    list<prefix_DFA*> active_prefixDfas;
+    list<state_t> active_states;
+    active_prefixDfas.push_back(prefixDfa->parent_node);
+    active_states.push_back(0);
+
+    res = fseek(tracefile, -prefixDfa->depth-1, SEEK_CUR);
+    if(res != 0) {
+        fsetpos(tracefile, &pos_origin);
+        return true;
+    }
+
+    while(1){
+        long inputs = ftell(tracefile);
+        char c = fgetc(tracefile);
+        list<prefix_DFA*> add_post_dfas;
+        int add_cnt = 0;
+
+        auto it_prefixdfa = active_prefixDfas.begin();
+        for(auto it_state = active_states.begin(); it_state != active_states.end(); it_state++){
+            //clear silent prefix_dfa
+            if((*it_prefixdfa)->is_silent){
+                it_state = active_states.erase(it_state);
+                it_state--;
+                it_prefixdfa = active_prefixDfas.erase(it_prefixdfa);
+                it_prefixdfa--;
+            }
+
+            //calculate CPU overhead here
+            statics->active_state_num_on_character[inputs]++;
+            statics->total_active_state_num++;
+
+            DFA* iter_dfa = (*it_prefixdfa)->prefix_dfa;
+            *it_state = iter_dfa->get_next_state(*it_state, (unsigned char)c);
+            if(!iter_dfa->accepts(*it_state)->empty()){
+                //only match once. here match occurs
+                if((*it_prefixdfa)->next_node == nullptr)
+                {
+                    fsetpos(tracefile, &pos_origin);
+                    return true;
+                }
+                //activate post dfa (next char)
+                prefix_DFA* candidate = (*it_prefixdfa)->get_post_dfa();
+                if(candidate != nullptr) {
+                    add_post_dfas.push_back(candidate);
+                    add_cnt++;
+                }
+            }
+            //clear dead state & dead prefixdfa
+            if(*it_state == iter_dfa->dead_state){
+                it_state = active_states.erase(it_state);
+                it_state--;
+                it_prefixdfa = active_prefixDfas.erase(it_prefixdfa);
+                it_prefixdfa--;
+            }
+            //increment dfa iterator
+            it_prefixdfa++;
+        }
+
+        active_prefixDfas.insert(active_prefixDfas.end(), add_post_dfas.begin(), add_post_dfas.end());
+        active_states.insert(active_states.end(), add_cnt, 0);
+
+        if(active_prefixDfas.empty()) break;
+        if((res=fseek(tracefile, -2, SEEK_CUR)) != 0) break;
+    }
+
+    fsetpos(tracefile, &pos_origin);
+    return false;
+}
+
+void trace::traverse(prefix_DFA *prefixDfa, match_statics* statics, FILE *stream) {
+    if (tracefile== nullptr) fatal("trace file is NULL!");
+    rewind(tracefile);
+
+    prefixDfa->init();
+
+    state_t state=0;
+    char c=fgetc(tracefile);
+    long inputs=0;
+    DFA* dfa = prefixDfa->prefix_dfa;
+    list<prefix_DFA*> active_prefixDfas;
+    list<state_t> active_states;
+
+    //while(c!=EOF){
+    while(!feof(tracefile)){
+        list<prefix_DFA*> add_post_dfas;
+        int add_cnt = 0;
+
+        state=dfa->get_next_state(state,(unsigned char)c);
+        if (!dfa->accepts(state)->empty()){
+            statics->prefix_match_times++;
+            //judge if has pre section, and try match first
+            if(pre_match(prefixDfa, statics, stream)){
+                //activate post dfa (next char)
+                prefix_DFA* candidate = prefixDfa->get_post_dfa();
+                if(candidate != nullptr) {
+                    add_post_dfas.push_back(candidate);
+                    add_cnt++;
+                }
+            }
+        }
+
+        auto it_prefixdfa = active_prefixDfas.begin();
+        for(auto it_state = active_states.begin(); it_state != active_states.end(); it_state++){
+            //clear silent prefix_dfa
+            if((*it_prefixdfa)->is_silent){
+                it_state = active_states.erase(it_state);
+                it_state--;
+                it_prefixdfa = active_prefixDfas.erase(it_prefixdfa);
+                it_prefixdfa--;
+            }
+
+            //calculate CPU overhead here
+            statics->active_state_num_on_character[inputs]++;
+            statics->total_active_state_num++;
+
+            DFA* iter_dfa = (*it_prefixdfa)->prefix_dfa;
+            *it_state = iter_dfa->get_next_state(*it_state, (unsigned char)c);
+            if(!iter_dfa->accepts(*it_state)->empty()){
+#ifdef MATCH_ONCE
+                //only match once. here match occurs
+                if((*it_prefixdfa)->next_node == nullptr) return;
+#endif
+                //activate post dfa (next char)
+                prefix_DFA* candidate = (*it_prefixdfa)->get_post_dfa();
+                if(candidate != nullptr) {
+                    add_post_dfas.push_back(candidate);
+                    add_cnt++;
+                }
+            }
+            //clear dead state & dead prefixdfa
+            if(*it_state == iter_dfa->dead_state){
+                it_state = active_states.erase(it_state);
+                it_state--;
+                it_prefixdfa = active_prefixDfas.erase(it_prefixdfa);
+                it_prefixdfa--;
+            }
+            //increment dfa iterator
+            it_prefixdfa++;
+        }
+
+        active_prefixDfas.insert(active_prefixDfas.end(), add_post_dfas.begin(), add_post_dfas.end());
+        active_states.insert(active_states.end(), add_cnt, 0);
+        inputs++;
+        c=fgetc(tracefile);
+    }
+}
+
+bool mycomp(const pair<pair<uint32_t, uint32_t>, prefix_DFA*> &p1, const pair<pair<uint32_t, uint32_t>, prefix_DFA*> &p2){
+    return p1.first.first < p2.first.first;
+}
+
+void trace::traverse(list<prefix_DFA*> *prefixDfa_list, FILE *stream) {
+    if (tracefile==NULL) fatal("trace file is NULL!");
+    rewind(tracefile);
+
+    match_statics statics;
+    memset(&statics, 0, sizeof(statics));
+    //get char number of the trace file
+    int char_num = 0;
+    char c;
+    //for(c = getc(tracefile); c != EOF; c = getc(tracefile)){
+    for(c = getc(tracefile); !feof(tracefile); c = getc(tracefile)){
+        char_num += 1;
+    }
+    statics.active_state_num_on_character = (unsigned int*) malloc(sizeof(unsigned int) * (char_num + 5));
+    memset(statics.active_state_num_on_character, 0, sizeof(unsigned int) * (char_num+5));
+
+    int tem_cnt = 0;
+    unsigned int prefix_matching_times = 0;
+    uint32_t total_states = 0;
+    list<pair<pair<uint32_t, uint32_t>, prefix_DFA*>> lis_res;
+    for(auto &it: *prefixDfa_list){
+        printf("traversing %d/%d prefixDfa\n", ++tem_cnt, prefixDfa_list->size());
+        traverse(it, &statics, stream);
+        unsigned int single_match_times = statics.prefix_match_times - prefix_matching_times;
+        uint32_t single_total_states = statics.total_active_state_num - total_states;
+        printf("matching prefix times:%u\n", single_match_times);
+        printf("total states:%u\n", single_total_states);
+        prefix_matching_times = statics.prefix_match_times;
+        total_states = statics.total_active_state_num;
+
+        //used to sort show
+        pair<pair<uint32_t, uint32_t>, prefix_DFA*> pair = make_pair(make_pair(single_total_states, single_match_times), it);
+        lis_res.push_back(pair);
+    }
+    lis_res.sort(mycomp);
+    for(auto& it: lis_res){
+        printf("re:%s\n", it.second->re);
+        printf("single_total_states:%u, single_matching_times:%u\n", it.first.first, it.first.second);
+    }
+
+    //print statics
+    unsigned int max_states_num = 0;
+    for(int i=0; i<char_num; i++) {
+        //statics.total_active_state_num += statics.active_state_num_on_character[i];
+        max_states_num = max(max_states_num, statics.active_state_num_on_character[i]);
+    }
+    statics.average_active_state_num = statics.total_active_state_num * 1.0 / char_num;
+    printf("#states:");
+    cout << statics.total_active_state_num << endl;
+    printf("#average_states:");
+    cout << statics.average_active_state_num << endl;
+    printf("#max_states:");
+    cout << max_states_num << endl;
 }

@@ -54,6 +54,7 @@
 #include "hybrid_fa.h"
 #include "fa_memory.h"
 #include "dfas_memory.h"
+#include "prefix_DFA.h"
 
 #define MIN_INPUTS 50000   //minimum size of the input, in case of probabilistic traversal
 #define MAX_INPUTS 1000000 //maximum size of the input, in case of probabilistic traversal
@@ -63,6 +64,16 @@
 #define MAX_MEM_REF CSIZE+1+CSIZE/4 //max number of memory references
 
 #define ONLY_NEW_PATHS 1
+#define MATCH_ONCE //dave add: one pattern only report the first match (for prefix_DFA)
+
+struct match_statics_{
+    unsigned int total_active_state_num;
+    double average_active_state_num; //on each character traversed
+    unsigned int* active_state_num_on_character;
+
+    unsigned int prefix_match_times;
+};
+typedef match_statics_ match_statics;
 
 class trace{
 	
@@ -101,6 +112,11 @@ public:
 	
 	/* traverses the given dfa and prints statistics to stream */ 
 	void traverse(DFA *dfa, FILE *stream=stdout);
+
+	/*dave add: traverses the given prefix_dfa and prints statistics to stream*/
+	void traverse(prefix_DFA* prefixDfa, match_statics *statics, FILE *stream=stdout);
+    void traverse(list<prefix_DFA *> *prefixDfa_list, FILE *stream=stdout);
+    bool pre_match(prefix_DFA *prefixDfa, match_statics* statics, FILE *stream);
 
 	/* traverses the given ecdfa and prints statistics to stream */ 
 	void traverse(EgCmpDfa *ecdfa, FILE *stream=stdout);
@@ -171,7 +187,6 @@ private:
 	
 	//returns the next deepest state reachable from the given active set on the indicated input character	
 	NFA *get_next_forward(nfa_set *active_set, int c);
-	
 };
 
 inline FILE *trace::get_trace(){return tracefile;}

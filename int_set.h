@@ -47,6 +47,7 @@
 #define UNDEF 0xFFFFFFFF
 
 class int_set {
+public:
 	unsigned int N;				// max number of elements in the set
 	bool *item;					// item[i] is true if i is in the set
 	unsigned int num_el;        // real number of elements in the set

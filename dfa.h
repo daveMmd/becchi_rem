@@ -108,8 +108,7 @@ protected:
         /* for each state, its depth (minimum "distance" from the entry state 0) */
         unsigned int *depth;
         
-        /* state involving no progression */
-        state_t dead_state;
+
              
 private:
 
@@ -122,6 +121,9 @@ private:
 	void d2fa_graph_to_default_tx(wgraph *T,partitionX *P,int *d);
 	
 public:
+    /* state involving no progression */
+    state_t dead_state;
+
     /*add by dave*/
     unsigned char **mask_table;
 

@@ -45,6 +45,7 @@
 #include <iterator>
 
 #include "subset.h"
+#include "dave_subset.h"
 
 #define LIMIT 254
 #define UNDEFINED 0xFFFFFFFF
@@ -69,6 +70,7 @@ NFA::NFA(){
 	last=this;
 	cloned_nfa=NULL;
 	pattern = NULL;
+	length_same_target = nullptr;
 }
 
 /* destructor */
@@ -97,6 +99,7 @@ NFA::~NFA(){
     for(vector<bitset<MAX_NFA_SIZE> *>::iterator it=succs.begin(); it!=succs.end(); it++) delete(*it);
 
     if(pattern != NULL) free(pattern);
+    if(length_same_target != nullptr) free(length_same_target);
 }
 
 NFA* NFA::clone() {
@@ -312,6 +315,19 @@ void NFA::add_transition(symbol_t c, NFA *nfa){
 	transitions->insert(tr);
 }
 
+void NFA::get_transitions(symbol_t c, nfa_set* target) const{
+    if (transitions->empty()) return ;
+    FOREACH_TRANSITION(it){
+        symbol_t ch=(*it)->first;
+        NFA *nfa=(*it)->second;
+        if (c==ch) {
+            //nfa->epsilon's states are added to target
+            nfa->epsilon_closure(target);
+            //target->insert(nfa);
+        }
+    }
+}
+
 nfa_set *NFA::get_transitions(symbol_t c){
 	if (transitions->empty()) return NULL;
 	nfa_set *result=new nfa_set();
@@ -438,7 +454,23 @@ set<state_t> *NFA::set_NFA2ids(nfa_set *fas){
 		ids->insert((*it)->id);
 	}
 	return ids;
-}	
+}
+
+nfa_set *NFA::epsilon_closure(nfa_set* target){
+    //nfa_set *closure = new nfa_set();
+    nfa_list *queue = new nfa_list();
+    queue->push_back(this);
+    while (!queue->empty()){
+        NFA *nfa = queue->front(); queue->pop_front();
+        target->insert(nfa);
+        FOREACH_LIST(nfa->epsilon,it){
+            if (!SET_MBR(target,*it)){
+                queue->push_back(*it);
+            }
+        }
+    }
+    delete queue;
+}
 
 nfa_set *NFA::epsilon_closure(){
 	nfa_set *closure = new nfa_set();
@@ -457,12 +489,42 @@ nfa_set *NFA::epsilon_closure(){
 	return closure;
 }
 
+bool equal_set(nfa_set* nfas1, nfa_set* nfas2){
+    if(nfas1 == nullptr || nfas2 == nullptr) return false;
+    if(nfas1->size() != nfas2->size()) return false;
+    for(auto it1 = nfas1->begin(), it2 = nfas2->begin(); it1 != nfas1->end(); it1++, it2++){
+        if(*it1 != *it2) return false;
+    }
+    return true;
+}
+
+int NFA::get_length_same_target(symbol_t c){
+    if(length_same_target != nullptr) return length_same_target[c];
+    length_same_target = (int*) malloc(sizeof(int) * 256);//new int[256];
+    nfa_set *nfas_next = nullptr;
+    for(int i = CSIZE - 1; i >= 0; i--){
+        nfa_set *nfas = new nfa_set();
+        get_transitions(i, nfas);
+        if(equal_set(nfas_next, nfas)) length_same_target[i] = length_same_target[i+1] + 1;
+        else length_same_target[i] = 1;
+        delete nfas_next;
+        nfas_next = nfas;
+    }
+    return length_same_target[c];
+}
+
+#define DECREASE_CHARS 1
+
 DFA *NFA::nfa2dfa(){
 	// DFA to be created
 	DFA *dfa=new DFA();
 	
 	// contains mapping between DFA and NFA set of states
-	subset *mapping=new subset(0);
+#if IMPROVE_SUBSET
+    dave_subset *mapping = new dave_subset();
+#else
+    subset *mapping=new subset(0);
+#endif
 	//queue of DFA states to be processed and of the set of NFA states they correspond to
 	list <state_t> *queue = new list<state_t>();
 	list <nfa_set*> *mapping_queue = new list<nfa_set*>();  
@@ -479,7 +541,10 @@ DFA *NFA::nfa2dfa(){
 	target = this->epsilon_closure();
 	ids=set_NFA2ids(target);
 	mapping->lookup(ids,dfa,&target_state);
+#if !IMPROVE_SUBSET
 	delete ids;
+#endif
+
 	FOREACH_SET(target,set_it)  dfa->accepts(target_state)->add((*set_it)->accepting);
 	queue->push_back(target_state);
 	mapping_queue->push_back(target);
@@ -494,9 +559,21 @@ DFA *NFA::nfa2dfa(){
 		if(!dfa->marked(state)){ 
 			dfa->mark(state);
 			//iterate other all characters and compute the next state for each of them
+#if !DECREASE_CHARS
 			for(symbol_t i=0;i<CSIZE;i++){
+#else
+            for(symbol_t i=0; i<CSIZE; ){
+#endif
 				target= new nfa_set();
+				int length_with_same_target = 256;
 				FOREACH_SET(cl_state,set_it){
+#if DECREASE_CHARS
+				    length_with_same_target = min(length_with_same_target, (*set_it)->get_length_same_target(i));
+#endif
+#if 1
+				    //try improve by decreasing dynamic memory alloc and free
+                    (*set_it)->get_transitions(i, target);
+#else
 					nfa_set *state_set=(*set_it)->get_transitions(i);
 					if (state_set!=NULL){
 						FOREACH_SET(state_set,it2){
@@ -506,14 +583,17 @@ DFA *NFA::nfa2dfa(){
 						}
 						delete state_set;
 					}
+#endif
 				}
 							
 				//look whether the target set of state already corresponds to a state in the DFA
 				//if the target set of states does not already correspond to a state in a DFA,
 				//then add it
 				ids=set_NFA2ids(target);
-				bool found=mapping->lookup(ids,dfa,&target_state);
+				bool found=mapping->lookup(ids, dfa, &target_state);
+#if !IMPROVE_SUBSET
 				delete ids;
+#endif
 				if (target_state==MAX_DFA_SIZE){
 					delete queue;
 					while (!mapping_queue->empty()){
@@ -537,7 +617,13 @@ DFA *NFA::nfa2dfa(){
 				}else{
 					delete target;
 				}
-				dfa->add_transition(state,i,target_state); // add transition to the DFA
+#if !DECREASE_CHARS
+				dfa->add_transition(state, i, target_state); // add transition to the DFA
+#else
+                //printf("i=%d length_with_same_target=%d\n", i, length_with_same_target);
+				for(int j = i; j < i + length_with_same_target; j++) dfa->add_transition(state, j, target_state);
+				i += length_with_same_target;
+#endif
 			}//end for on character i		
 		}//end if state marked
 		delete cl_state;
@@ -545,8 +631,10 @@ DFA *NFA::nfa2dfa(){
 	//deallocate all the sets and the state_mapping data structure
 	delete queue;
 	delete mapping_queue;
+#if !IMPROVE_SUBSET
 	if (DEBUG) mapping->dump(); //dumping the NFA-DFA number of state information
-	delete mapping;
+#endif
+    delete mapping;
 
 	return dfa;
 }
@@ -786,6 +874,8 @@ NFA *NFA::link(NFA *fa){
 	return this->last;
 }
 
+
+#define DAVE_NOTCHANGE_REP 0
 /* 
  * makes a machine repeatable from lb (lower bound) to ub (upper bound) times. 
  * ub may be _INFINITY 
@@ -838,9 +928,23 @@ NFA *NFA::make_rep(int lb,int ub){
 					fatal("{0,n} counting constraint\n");
 #else
 					if (!epsilon->empty()) this->add_epsilon(); //to avoid critical situations with backward epsilon
-					this->get_first()->epsilon->push_back(this->get_last());					
+#if DAVE_NOTCHANGE_REP
+					/*dave: 将使任意两个状态之间带有epsilon转移，导致子集构造法耗时*/
+					this->get_first()->epsilon->push_back(this->get_last());
 					NFA *copies = this->make_mdup(ub-1);
 					return copies->link(this);
+#else
+					/*dave modify: 连接每一个子fa的first() epsilon到最后一个子fa的last()*/
+                    NFA* head_nfa = this->make_dup();
+                    head_nfa->get_first()->epsilon->push_back(this->get_last());
+					for(int i=1; i < ub-1; i++){
+					    NFA* copy = this->make_dup();
+                        copy->get_first()->epsilon->push_back(this->get_last());
+                        head_nfa = head_nfa->link(copy);
+					}
+                    this->get_first()->epsilon->push_back(this->get_last());
+					return head_nfa->link(this);
+#endif
 #endif					
 				}
 			//{1,n}	
@@ -850,13 +954,24 @@ NFA *NFA::make_rep(int lb,int ub){
 					fatal("{1,n} counting constraint\n");
 #else
 					if (!epsilon->empty()) this->add_epsilon(); //to avoid critical situations with backward epsilon
+#if DAVE_NOTCHANGE_REP
 					NFA *copy = this->make_dup();
 					copy->get_first()->epsilon->push_back(copy->get_last());					
 					if (ub==2)
 						return this->get_last()->link(copy);
 					else	
 						return (this->get_last()->link(copy))->link(copy->make_mdup(ub-2));
-#endif				
+#else
+                    NFA* head_nfa = this->make_dup();
+                    for(int i=0; i < ub-2; i++){
+                        NFA* copy = this->make_dup();
+                        copy->get_first()->epsilon->push_back(this->get_last());
+                        head_nfa = head_nfa->link(copy);
+                    }
+                    this->get_first()->epsilon->push_back(this->get_last());
+                    return head_nfa->link(this);
+#endif
+#endif
 			//{m,n}
 			}else{
 				if (lb>ub) fatal("{m,n} counting constraint with m>n");
@@ -864,11 +979,22 @@ NFA *NFA::make_rep(int lb,int ub){
 					fatal("{m,n} counting constraint\n");
 #else
 					if (!epsilon->empty()) this->add_epsilon(); //to avoid critical situations with backward epsilon
+#if DAVE_NOTCHANGE_REP
 					NFA *head = this->make_mdup(lb-1);
 					NFA *tail = this->make_dup();
 					tail->get_first()->epsilon->push_back(tail->get_last());
 					if (ub-lb>1) tail=(tail->get_last())->link(tail->make_mdup(ub-lb-1));	
-					return ((this->get_last())->link(head))->link(tail);				
+					return ((this->get_last())->link(head))->link(tail);
+#else
+                    NFA* head_nfa = this->make_mdup(lb);
+                    for(int i=0; i < ub-lb-1; i++){
+                        NFA* copy = this->make_dup();
+                        copy->get_first()->epsilon->push_back(this->get_last());
+                        head_nfa = head_nfa->link(copy);
+                    }
+                    this->get_first()->epsilon->push_back(this->get_last());
+                    return head_nfa->link(this);
+#endif
 #endif				
 			}
 		}

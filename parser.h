@@ -94,10 +94,16 @@ public:
 
 	list<NFA *>* parse_to_list(FILE *file, int * size, int from=1, int to=-1);
     list<NFA *>* parse_to_list_mp(FILE *file, int * size);
+
+    list<NFA *>* parse_to_list_from_regexlist(list<char*> *regex_list);
 	
 	//parses all the regular expressions containted in file and returns a set of DFAs
 	dfa_set *parse_to_dfa(FILE *file);
-	
+
+    //process an escape sequence
+    static int process_escape(const char *re, int ptr, int_set *chars);
+
+    NFA *parse_from_regex(char *re);
 private:
 
 	//parses a regular expressions into the given NFA
@@ -105,16 +111,12 @@ private:
 
 	//parses a substring of a regular expression and returns the corresponding NFA
 	NFA *parse_re(const char *re, int *ptr, bool bracket);
-	
-	//process an escape sequence
-	int process_escape(const char *re, int ptr, int_set *chars);
 
 	//process a  bounded repetition ({})
 	int process_quantifier(const char *re, int ptr,int *lb, int *ub);
 
 	//process a range of characters ([-])
 	int process_range(NFA **fa, NFA **to_link, const char *re, int ptr);
-	
 };
 
 // returns true if the given character is special

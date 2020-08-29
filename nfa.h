@@ -159,8 +159,11 @@ public:
 	static bool ignore_case;
 
 	/* number of rules */
-	static int num_rules;	
-	
+	static int num_rules;
+
+	/*length same target*/
+	int *length_same_target;
+
 public:
 
 	/* constructor */
@@ -369,6 +372,12 @@ private:
 
     nfa_set* bits2states(bitset<MAX_NFA_SIZE> &bits);
 
+    //dave add: to decrease memory alloc and free
+    void get_transitions(symbol_t c, nfa_set *target) const;
+
+    int get_length_same_target(symbol_t c);
+
+    nfa_set *epsilon_closure(nfa_set *target);
 };
 
 inline void NFA::accept(){this->accepting->insert(++num_rules);}

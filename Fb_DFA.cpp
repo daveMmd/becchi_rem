@@ -29,6 +29,7 @@ Fb_NFA* reverse2nfa(Fb_DFA* dfa){
 
 Fb_DFA::Fb_DFA(DFA *dfa) {
     //init
+    cons2state_num = -1;
     _size = 17 * dfa->size();// each node plus 16 new nodes --> 17 nodes
     state_table = (state_t **) malloc(sizeof(state_t *) * (_size + 5));
     for(int i = 0; i < _size + 5; i++){
@@ -82,6 +83,7 @@ state_t Fb_DFA::add_state() {
 }
 
 Fb_DFA::Fb_DFA() {
+    cons2state_num = -1;
     _size = 0;
     entry_allocated = 1000;
 
@@ -115,10 +117,14 @@ Fb_DFA* Fb_DFA::minimise() {
     Fb_DFA* fb_dfa = fb_nfa->nfa2dfa();
     //fb_dfa->to_dot("./4dfa-1r.dot", "4dfa");
     delete fb_nfa;
+    if(fb_dfa == NULL) return NULL;
     //fb_nfa =  fb_dfa->reverse2nfa();
     fb_nfa = reverse2nfa(fb_dfa);
     delete fb_dfa;
-    return fb_nfa->nfa2dfa();
+    Fb_DFA* minimum_dfa = fb_nfa->nfa2dfa();
+    delete fb_nfa;
+    
+    return minimum_dfa;
 }
 
 /* 1.reverse accept states and start states
@@ -229,6 +235,7 @@ int Fb_DFA::less2states() {
 }
 
 int Fb_DFA::cons2states() {
+    if(cons2state_num != -1) return cons2state_num;
     //1.less or equal 2 states
     //2.less than or euqal to 3 segments
     int res = 0;
@@ -254,6 +261,91 @@ int Fb_DFA::cons2states() {
         seg_number++;
         if(seg_number <= 3) res++;
     }
+    cons2state_num = res;
     return res;
-    return 0;
+}
+
+Fb_DFA *Fb_DFA::converge(Fb_DFA *dfa) {
+    /*1.filter: assume convergence will definitely cause a increase of state num*/
+    if(this->size() + dfa->size() > 256) return nullptr;
+    int big_states_num = (this->size() - this->cons2states()) + (dfa->size() - dfa->cons2states());
+    if(big_states_num > 137) return nullptr;
+
+    /*2.merge 2 dfas*/
+    Fb_DFA* new_dfa = new Fb_DFA();
+    list<state_t> queue;
+    list<pair<state_t, state_t>> mapping_queue;
+    map<pair<state_t, state_t>, state_t> mapping;
+
+    state_t start = new_dfa->add_state();
+    queue.push_back(start);
+    mapping_queue.push_back(make_pair(0, 0));
+    mapping[make_pair(0, 0)] = start;
+    /*todo: ACCEPTING*/
+    if(is_accept[0] || dfa->is_accept[0]) new_dfa->is_accept[start] = 1;
+
+    while(!queue.empty()){
+        state_t cur_state = queue.front(); queue.pop_front();
+        pair<state_t, state_t> cur_pair = mapping_queue.front(); mapping_queue.pop_front();
+        /*todo: ACCEPTING*/
+        if(is_accept[cur_pair.first] || dfa->is_accept[cur_pair.second]) new_dfa->is_accept[cur_state] = 1;
+
+        for(int c = 0; c < 16; c++){
+            pair<state_t, state_t> destination_pair(state_table[cur_pair.first][c], dfa->state_table[cur_pair.second][c]);
+            map<pair<state_t, state_t>, state_t>::iterator it = mapping.find(destination_pair);
+            state_t next_state;
+            if(it == mapping.end()){
+                next_state = new_dfa->add_state();
+                if(next_state > 256){
+                    delete new_dfa;
+                    return nullptr;
+                }
+                queue.push_back(next_state);
+                mapping_queue.push_back(destination_pair);
+                mapping[destination_pair] = next_state;
+            }
+            else{
+                next_state = it->second;
+            }
+            new_dfa->add_transition(cur_state, c, next_state);
+        }
+    }
+
+    /*Accuratly filter*/
+    if(!new_dfa->small_enough()){
+        delete new_dfa;
+        return nullptr;
+    }
+
+    return new_dfa;
+}
+
+/*
+ * 1.at most 256 states
+ * 2.at most 137 big states(cannot be compressed)
+ * */
+bool Fb_DFA::small_enough() {
+    if(size() > 256 || size() - cons2states() > 137){
+        //fprintf(stderr, "dfa cannot be put into FPGA alone!\n");
+        return false;
+    }
+    return true;
+}
+
+int Fb_DFA::get_large_states_num() {
+    return this->size() - this->cons2states();
+}
+
+float Fb_DFA::get_ratio() {
+    //todo
+    if(small_enough()) return 0;
+
+    int large_states_num = get_large_states_num();
+    float times = (large_states_num - 120) * 1.0 / 120; //tigten 137 to 120
+    float ratio1 = times / (times + 1);
+
+    times = (size() - 220) * 1.0 / 220; //tigten 256 to 220
+    float ratio2 = times / (times + 1);
+
+    return max(ratio1, ratio2);
 }

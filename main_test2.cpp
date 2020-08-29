@@ -1,3 +1,4 @@
+#include <sys/time.h>
 #include "stdinc.h"
 #include "parser.h"
 #include "ecdfa.h"
@@ -123,6 +124,7 @@ static int parse_arguments(int argc, char **argv)
 
 int main(int argc, char **argv){
 	//read configuration
+	struct timeval start, end;
 	init_conf();
 	while(!parse_arguments(argc,argv)) usage();
 	print_conf();
@@ -137,6 +139,31 @@ int main(int argc, char **argv){
 	if(config.regex_file!=NULL){
 		FILE *re_file=fopen(config.regex_file,"r");
 		regex_parser *parser=new regex_parser(config.i_mod,config.m_mod);
+		int size = 0;
+		list<NFA*> *nfa_list = parser->parse_to_list_mp(re_file, &size);
+		for(int i = 0; i < size; i++){
+		    NFA* nfa = nfa_list->front();
+		    nfa_list->pop_front();
+
+		    printf("initial nfa size:%d\n", nfa->size());
+		    FILE* file = fopen("../res/nfa.dot", "w");
+		    nfa->to_dot(file, "nfa");
+		    fclose(file);
+            //nfa->reduce();
+            nfa->remove_epsilon();
+            FILE* file2 = fopen("../res/nfa_remove.dot", "w");
+            nfa->to_dot(file2, "nfa_remove");
+            fclose(file2);
+            printf("reduced nfa size:%d\n", nfa->size());
+            gettimeofday(&start, NULL);
+            DFA* dfa = nfa->nfa2dfa();
+            gettimeofday(&end, NULL);
+            printf("nfa2dfa cost time:%d seconds\n", end.tv_sec - start.tv_sec);
+            printf("initial dfa size:%d\n", dfa->size());
+            dfa->minimize();
+            printf("minimised dfa size:%d\n", dfa->size());
+		}
+		/*
 		dfas = parser->parse_to_dfa(re_file);
 		printf("%d DFAs created\n",dfas->size());
 		delete parser;
@@ -144,45 +171,12 @@ int main(int argc, char **argv){
 		int idx=0;
 		FOREACH_DFASET(dfas,it) {
 			printf("DFA #%d::  size=%ld, memSize=%d\n",idx,(*it)->size(), (*it)->size()*1024);
-
-			RCDFA *rcdfa = new RCDFA(*it);
-			printf("rcdfa #%d: size=%u, memSize=%u, newMemSize=%u\n", idx, rcdfa->size(), rcdfa->get_m_size(), rcdfa->getMemSize());
-			delete rcdfa;
-
-			BitCmpDfa *bitdfa = new BitCmpDfa(*it);
-			printf("bitdfa #%d: size=%u, memSize=%u\n", idx, bitdfa->getSize(), bitdfa->getMemSize());
-			delete bitdfa;
-
-			ORleDfa *orledfa = new ORleDfa(*it);
-			printf("orledfa #%d: size=%u, memSize=%u\n", idx, orledfa->getSize(), orledfa->getMemSize());
-			delete orledfa;
-
-			RleDfa *rledfa = new RleDfa(*it);
-			printf("rledfa #%d: size=%u, memSize=%u\n", idx, rledfa->getSize(), rledfa->getMemSize());
-			delete rledfa;
-
-			EgCmpDfa *ecfa = new EgCmpDfa(*it);
-			printf("ecfa #%d: size=%u, memSize=%d\n", idx, ecfa->getSize(), ecfa->getMemSize());
-			delete ecfa;
-
-			// EgCmpDfaL *ecfal = new EgCmpDfaL(*it);
-			// printf("ecfal #%d: size=%u, memSize=%d\n", idx, ecfal->getSize(), ecfal->getMemSize());
-			// delete ecfal;
-
-			EgCmpDfaB *ecfab = new EgCmpDfaB(*it);
-			printf("ecfab #%d: size=%u, memSize=%d\n", idx, ecfab->getSize(), ecfab->getMemSize());
-			delete ecfab;
-			
-			// if (config.out_file!=NULL){
-			// 	char out_file[100];
-			// 	sprintf(out_file,"%s%d",config.out_file,idx);
-			// 	FILE *file=fopen(out_file,"w");
-			// 	fprintf(stderr,"Exporting DFA #%d to file %s ...\n",idx,out_file);
-			// 	(*it)->put(file);
-			// 	fclose(file);
-			// 	idx++;
-			// }
-		}
+            (*it)->minimize();
+            printf("minimised DFA #%d::  size=%ld, memSize=%d\n",idx,(*it)->size(), (*it)->size()*1024);
+            FILE* f = fopen("./sing_dfa.dot", "w");
+            (*it)->to_dot(f, "dfa");
+            fclose(f);
+        }*/
 	}
 
 	return 0;

@@ -4,6 +4,7 @@
 
 #include "Fb_NFA.h"
 #include "subset.h"
+#include "dave_subset.h"
 
 Fb_NFA::Fb_NFA(int size) {
     _size = size;
@@ -29,10 +30,14 @@ Fb_DFA * Fb_NFA::nfa2dfa() {
     Fb_DFA* dfa = new Fb_DFA();
 
     // contains mapping between DFA and NFA set of states
+#if IMPROVE_SUBSET
+    dave_subset *mapping = new dave_subset();
+#else
     subset *mapping=new subset(0);
+#endif
     //queue of DFA states to be processed and of the set of NFA states they correspond to
-    list <state_t> *queue = new list<state_t>();
-    list <Fb_nfaset *> *mapping_queue = new list<Fb_nfaset *>();
+    list<state_t> *queue = new list<state_t>();
+    list<Fb_nfaset *> *mapping_queue = new list<Fb_nfaset *>();
     //iterators used later on
     Fb_nfaset::iterator set_it;
     //new dfa state id
@@ -48,7 +53,9 @@ Fb_DFA * Fb_NFA::nfa2dfa() {
     Fb_nfaset *temp = new Fb_nfaset();
     temp->insert(target->begin(), target->end());
     mapping->lookup(temp, dfa, &target_state);
+#if !IMPROVE_SUBSET
     delete temp;
+#endif
 
     //FOREACH_SET(target,set_it)  dfa->accepts(target_state)->add((*set_it)->accepting);
     for(set_it = target->begin(); set_it != target->end(); set_it++)
@@ -82,9 +89,11 @@ Fb_DFA * Fb_NFA::nfa2dfa() {
                 Fb_nfaset *temp = new Fb_nfaset();
                 temp->insert(target->begin(), target->end());
                 bool found=mapping->lookup(temp, dfa, &target_state);
+#if !IMPROVE_SUBSET
                 delete temp;
+#endif
 
-                if (target_state==MAX_DFA_SIZE){
+                if (target_state == MAX_DFA_SIZE*5){
                     delete queue;
                     while (!mapping_queue->empty()){
                         delete mapping_queue->front();
@@ -119,7 +128,7 @@ Fb_DFA * Fb_NFA::nfa2dfa() {
     //deallocate all the sets and the state_mapping data structure
     delete queue;
     delete mapping_queue;
-    if (DEBUG) mapping->dump(); //dumping the NFA-DFA number of state information
+    //if (DEBUG) mapping->dump(); //dumping the NFA-DFA number of state information
     delete mapping;
 
     return dfa;
