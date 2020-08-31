@@ -2,6 +2,7 @@
 // Created by 钟金诚 on 2020/7/22.
 //
 
+#include <vector>
 #include "Fb_DFA.h"
 #include "Fb_NFA.h"
 
@@ -29,6 +30,7 @@ Fb_NFA* reverse2nfa(Fb_DFA* dfa){
 
 Fb_DFA::Fb_DFA(DFA *dfa) {
     //init
+    dead_state = NO_STATE;
     cons2state_num = -1;
     _size = 17 * dfa->size();// each node plus 16 new nodes --> 17 nodes
     state_table = (state_t **) malloc(sizeof(state_t *) * (_size + 5));
@@ -38,11 +40,12 @@ Fb_DFA::Fb_DFA(DFA *dfa) {
     is_accept = (int *) malloc(sizeof(int) * _size);
     memset(is_accept, 0, sizeof(int) * _size);
 
-    //accept states
-    for(state_t s=0; s<dfa->size(); s++){
+    //accept states && set dead_state
+    for(state_t s = 0; s < dfa->size(); s++){
         if(!dfa->accepts(s)->empty()){
             is_accept[s*17] = 1;
         }
+        if(s == dfa->dead_state) dead_state = s * 17;
     }
 
     /*build stt for fb_dfa*/
@@ -71,7 +74,7 @@ state_t Fb_DFA::add_state() {
         entry_allocated += MAX_DFA_SIZE_INCREMENT;
         state_table = reallocate_state_matrix(state_table, entry_allocated);
         for (state_t s=_size;s<entry_allocated;s++){
-            state_table[s]=NULL;
+            state_table[s]=nullptr;
         }
 
         is_accept = reallocate_int_array(is_accept, entry_allocated);
@@ -83,14 +86,16 @@ state_t Fb_DFA::add_state() {
 }
 
 Fb_DFA::Fb_DFA() {
+    dead_state = NO_STATE;
     cons2state_num = -1;
     _size = 0;
     entry_allocated = 1000;
 
     state_table = (state_t **) malloc(sizeof(state_t *) * entry_allocated);
     for(int i = 0; i < entry_allocated; i++){
-        state_table[i] = (state_t *) malloc(sizeof(state_t) * 16);
-        memset(state_table, NO_STATE, sizeof(state_t) * 16);
+        state_table[i] = nullptr;
+        /*state_table[i] = (state_t *) malloc(sizeof(state_t) * 16);
+        memset(state_table[i], NO_STATE, sizeof(state_t) * 16);*/
     }
     is_accept = (int *) malloc(sizeof(int) * entry_allocated);
     memset(is_accept, 0, sizeof(int) * entry_allocated);
@@ -349,3 +354,150 @@ float Fb_DFA::get_ratio() {
 
     return max(ratio1, ratio2);
 }
+
+void add_belong(state_t state, int partition, int *partition_belong, vector<list<state_t> *> *v){
+    partition_belong[state] = partition;
+    while(v->size() < partition+1) {
+        auto * new_list = new list<state_t >();
+        v->push_back(new_list);
+    }
+    (*v)[partition]->push_back(state);
+}
+
+Fb_DFA *Fb_DFA::minimise2() {
+    int *partition_belong1 = (int*) malloc(sizeof(int) * (_size + 5));
+    int *partition_belong2 = (int*) malloc(sizeof(int) * (_size + 5));
+    bool has_distinguish = true; //record Pk == Pk-1
+    vector<list<state_t> *> v1;
+    vector<list<state_t> *> v2;
+
+    /*step1. partition final states and non-final states and get P0*/
+    for(state_t state = 0; state < _size; state++){
+        if(is_accept[state]) add_belong(state, 0, partition_belong1, &v1);
+        else add_belong(state, 1, partition_belong1, &v1);
+        //else partition_belong1[state] = 1;
+    }
+
+    /*step2. repeat partition state set unless no new distinguishable states are generated*/
+    int* partition_pre = partition_belong1;
+    int* partition_next = partition_belong2;
+    vector<list<state_t> *> *v_pre = &v1;
+    vector<list<state_t> *> *v_next = &v2;
+    int *vis = (int *) malloc(sizeof(int) * (_size + 5)); // used to cut some pari to accelerate
+    while(has_distinguish){
+        /*init each repeat*/
+        has_distinguish = false;
+        int new_partition = 0;
+        memset(vis, 0, sizeof(int) * (_size + 5));
+        //free v_next
+        for(auto& it: *v_next) delete it;
+        v_next->clear();
+
+        //iterate each partition
+        for(auto &lis : *v_pre){
+            //iterate each pair of states
+            for(auto it_i = lis->begin(); it_i != lis->end(); it_i++){
+                bool flag_new_partition = true;
+                //for(auto it_j = it_i; it_j != lis->begin(); it_j--){
+                if(it_i != lis->begin()) {
+                    for (auto it_j = it_i;; it_j--) {
+                        if (it_j == it_i) continue;
+                        if (vis[*it_j]) continue;
+
+                        bool flag_distinguish = false;
+                        for (int c = 0; c < 16; c++) {
+                            if (partition_pre[get_next_state(*it_i, c)] != partition_pre[get_next_state(*it_j, c)]) {
+                                flag_distinguish = true;
+                                break;
+                            }
+                        }
+
+                        /*judge if *it_i is distinguishable with *it_j*/
+                        if (flag_distinguish) has_distinguish = true;
+                        else { //add to the same partition as *it_j(state)
+                            vis[*it_i] = 1;//can be cut
+                            flag_new_partition = false;
+                            add_belong(*it_i, partition_next[*it_j], partition_next, v_next);
+                            break;
+                        }
+
+                        if (it_j == lis->begin()) break;
+                    }
+                }
+                //*it_j(state) not in the same partition with any former state -> generate new partiton
+                if(flag_new_partition) {
+                    add_belong(*it_i, new_partition, partition_next, v_next);
+                    new_partition += 1;
+                }
+            }
+        }
+
+        //swap pre and next
+        swap(partition_pre, partition_next);
+        swap(v_pre, v_next);
+    }
+
+    /*step3. each partition is equivalent to one new state of reduced DFA*/
+    auto reduced_dfa = new Fb_DFA();
+    /*gen state*/
+    int *partition_state_map = partition_belong1;
+    for(int i = 0; i < (_size + 5); i++) partition_state_map[i] = -1;
+    reduced_dfa->add_state(); //gen state 0
+    //find which partition contain state 0 && set dead_state && set accept state
+    for(int i = 0; i < v_next->size(); i++){
+        list<state_t>* lis = (*v_next)[i];
+        for(auto &state: *lis){
+            if(state == 0) {
+                partition_state_map[i] = 0;
+            }
+            if(dead_state != NO_STATE && state == dead_state) {
+                if(partition_state_map[i] == -1){
+                    reduced_dfa->dead_state = reduced_dfa->add_state();
+                    partition_state_map[i] = reduced_dfa->dead_state;
+                }
+                else reduced_dfa->dead_state = partition_state_map[i];
+            }
+            if(is_accept[state]){
+                if(partition_state_map[i] == -1){
+                    state_t new_state = reduced_dfa->add_state();
+                    reduced_dfa->is_accept[new_state] = 1;
+                    partition_state_map[i] = new_state;
+                }
+                else reduced_dfa->is_accept[partition_state_map[i]] = 1;
+            }
+
+            //need adjust partition_belong2?
+            partition_belong2[state] = i;
+        }
+    }
+
+    //gen normal states
+    for(int i = 0; i < v_next->size(); i++){
+        if(partition_state_map[i] != -1) continue;
+        state_t state = reduced_dfa->add_state();
+        partition_state_map[i] = state;
+    }
+
+    /*gen transition*/
+    for(int i = 0; i < v_next->size(); i++){
+        state_t source = (*v_next)[i]->front();
+        int partition_source = partition_belong2[source];
+        for(int c = 0; c < 16; c++){
+            state_t target = get_next_state(source, c);
+            int partition_target = partition_belong2[target];
+            reduced_dfa->add_transition(partition_state_map[partition_source], c, partition_state_map[partition_target]);
+        }
+    }
+
+    //free resources
+    free(partition_belong1);
+    free(partition_belong2);
+    free(vis);
+    //free v_next
+    for(auto& it: v1) delete it;
+    for(auto& it: v2) delete it;
+
+    return reduced_dfa;
+}
+
+state_t Fb_DFA::get_next_state(state_t state, int c) {return state_table[state][c]; };

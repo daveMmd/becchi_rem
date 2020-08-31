@@ -109,5 +109,31 @@ public:
             next_node->add_re(s);
         }
     }
+
+    /*print how re is decomposed*/
+    void debug(FILE* file, char *regex){
+        if(parent_node == nullptr && next_node == nullptr) return;
+        fprintf(file, "\n#####\n%s\n#####\n", regex);
+        if(parent_node != nullptr){
+            fprintf(file, "***extract pre***:\n");
+            prefix_DFA* node = parent_node;
+            while(node != nullptr){
+                fprintf(file, "%s\n", node->re);
+                node = node->next_node;
+            }
+        }
+
+        fprintf(file, "***in bram***:\n");
+        fprintf(file, "%s\n", re);
+
+        if(next_node != nullptr){
+            fprintf(file, "***extract post***:\n");
+            prefix_DFA* node = next_node;
+            while(node != nullptr){
+                fprintf(file, "%s\n", node->re);
+                node = node->next_node;
+            }
+        }
+    }
 };
 #endif //BECCHI_REGEX_PREFIX_DFA_H

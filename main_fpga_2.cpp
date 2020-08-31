@@ -381,8 +381,14 @@ float bram_compatible(char *re, Fb_DFA* &fbdfa, DFA* &ref_dfa){
     dfa = nfa->nfa2dfa();
     if(dfa == nullptr) goto RET;
     dfa->minimize();
+    if(dfa->size() > 128){
+        ratio = (dfa->size() - 100) * 1.0 / 128;
+        goto RET;
+    }
     fb_dfa = new Fb_DFA(dfa);
-    minimise_fb_dfa = fb_dfa->minimise();
+
+    //minimise_fb_dfa = fb_dfa->minimise();
+    minimise_fb_dfa = fb_dfa->minimise2();
     if(minimise_fb_dfa == nullptr) goto RET;
     ratio = minimise_fb_dfa->get_ratio();
 
@@ -431,7 +437,8 @@ prefix_DFA* compile_single(char* re){
     }
     prefixDfa = new prefix_DFA();
     prefixDfa->add_dfa(dfa);
-    prefixDfa->add_re(re);
+    //prefixDfa->add_re(re);
+    prefixDfa->add_re(R_pre);
     //todo not used temporarily
     //delete fbdfa;
     prefixDfa->add_fbdfa(fbdfa);
@@ -456,7 +463,8 @@ prefix_DFA* compile_single(char* re){
         dfa2->minimize();
         //add dfa to prefix_dfa
         prefixDfa->add_dfa(dfa2);
-        prefixDfa->add_re(re_post);
+        //prefixDfa->add_re(re_post);
+        prefixDfa->add_re(R_pre);
         if(R_post[0] != '^') prefixDfa->set_activate_once();
 
         //free
@@ -489,7 +497,8 @@ prefix_DFA* compile_prefixDFA(char* R_post){
         dfa->minimize();
         //add dfa to prefix_dfa
         prefixDfa->add_dfa(dfa);
-        prefixDfa->add_re(re_post);
+        //prefixDfa->add_re(re_post);
+        prefixDfa->add_re(R_pre);
         if(R_post[0] != '^') prefixDfa->set_activate_once();
 
         //free
@@ -540,7 +549,8 @@ prefix_DFA* try_compile_single_mid(char* re){
     prefixDfa = new prefix_DFA();
     prefixDfa->depth = depth;
     prefixDfa->add_dfa(dfa);
-    prefixDfa->add_re(re);
+    //prefixDfa->add_re(re);
+    prefixDfa->add_re(R_mid);
     prefixDfa->add_fbdfa(fbDfa);
     prefixDfa->parent_node = prefixDfa_pre;
     prefixDfa->next_node = prefixDfa_post;
@@ -559,6 +569,8 @@ list<prefix_DFA*> *compile(list<char*> *regex_list){
     int size = regex_list->size();
     int cnt = 0;
     int bad_cnt = 0;
+
+    FILE* file_debug = fopen("../res/decompose_res.txt", "w");
     for(auto &it: *regex_list){
         printf("processing %d/%d re:%s\n", ++cnt, size, it);
         prefix_DFA* prefixDfa = compile_single(it);
@@ -566,10 +578,14 @@ list<prefix_DFA*> *compile(list<char*> *regex_list){
 
         if(prefixDfa == nullptr) {
             printf("BAD RULE-%d.\n", ++bad_cnt);
+            fprintf(file_debug, "BAD RULE-%d:%s\n", bad_cnt, it);
             continue;
         }
+        prefixDfa->debug(file_debug, it);
         prefix_dfa_list->push_back(prefixDfa);
     }
+
+    fclose(file_debug);
     return prefix_dfa_list;
 }
 
@@ -677,7 +693,7 @@ int main(int argc, char **argv){
     printf("compile cost time:%d seconds\n", end.tv_sec - start.tv_sec);
 
     //simulate to examine CPU burden
-    simulate(prefix_dfa_list);
+    //simulate(prefix_dfa_list);
     return 0;
 }
 #endif
