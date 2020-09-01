@@ -17,10 +17,18 @@
 /*
  * return p_match of R_pre
  * */
-double decompose(char *re, char *R_pre, char *R_post, int threshold) {
+std::list<char*> lis_R_pre; //used to save multiple R_pres
+std::list<char*> lis_R_post; //used to save multiple R_posts (correspond to lis_R_pre)
+double decompose(char *re, char *R_pre, char *R_post, int threshold, bool control_top) {
+    double p_match = 0;
     //init R_pre and R_post
     R_pre[0] = '\0';
     sprintf(R_post, "^");
+    //init lis_R_pre and lis_R_post
+    for(auto &it: lis_R_pre) free(it);
+    for(auto &it: lis_R_post) free(it);
+    lis_R_pre.clear();
+    lis_R_post.clear();
 
     bool flag_anchor = false;
     if(re[0] == '^') {
@@ -40,16 +48,40 @@ double decompose(char *re, char *R_pre, char *R_post, int threshold) {
     first_charClass.reset();
     if(flag_anchor) last_infinite_charclass.reset();
     else last_infinite_charclass.set();
-    comp_tree->decompose(threshold, alpha, R_pre, R_post, depth, &first_charClass, &last_infinite_charclass);
+    if(!control_top) comp_tree->decompose(threshold, alpha, R_pre, R_post, depth, &first_charClass, &last_infinite_charclass, true);
+    else comp_tree->decompose(threshold, alpha, R_pre, R_post, depth, &first_charClass, &last_infinite_charclass);
     delete comp_tree;
+
+    /*try get lis_R_pre and lis_R_post*/
+    if(!lis_R_pre.empty()){
+        //printf("***lis_R_pre and lis_R_post***\n");
+        auto it2 = lis_R_post.begin();
+        for(auto it = lis_R_pre.begin(); it != lis_R_pre.end(); it++){
+            char tmp[1000];
+            sprintf(tmp, "%s%s", R_pre, *it);
+            strcpy(*it, tmp);
+            //printf("%s\n", tmp);
+            sprintf(tmp, "^%s%s", *it2, R_post + 1);
+            strcpy(*it2, tmp);
+            //printf("%s\n", tmp);
+            it2++;
+            //caculate p_match
+            Component* comp = parse(*it);
+            p_match = std::max(p_match, comp->p_match());
+            delete comp;
+        }
+        return p_match;
+    }
+
     //failed to decompose
     if(strlen(R_pre) == 0 || strcmp(R_pre, "^") == 0) return 1.0;
 
     Component* comp = parse(R_pre);
     //int n_concat_pre = comp->num_concat();
-    double p_match = comp->p_match();
+    p_match = comp->p_match();
+#if 0 //if successfully process () and |, the case R_pre end up with .* will (probably) not occur
     //process the case R_pre end up with .*
-    if(typeid(*comp) == typeid(ComponentSequence)){
+    if(strlen(R_post) > 1 && typeid(*comp) == typeid(ComponentSequence)){
         int vec_size = ((ComponentSequence*)comp)->children.size();
         Component* last = ((ComponentSequence*)comp)->children.at(vec_size-1);
         if(typeid(*last) == typeid(ComponentRepeat)){
@@ -60,20 +92,21 @@ double decompose(char *re, char *R_pre, char *R_post, int threshold) {
                     for(int i=0; i < vec_size - 1; i++){
                         strcat(R_pre, ((ComponentSequence*)comp)->children.at(i)->get_re_part());
                     }
-                    if(strlen(R_post) > 1) {
+                    //if(strlen(R_post) > 1) {
                         char tmp[1000];
                         ((ComponentRepeat*)last)->m_max = ((ComponentRepeat*)last)->m_min;
                         sprintf(tmp, "%s%s", ((ComponentSequence*)comp)->children.at(vec_size - 1)->get_re_part(), R_post+1);
                         strcpy(R_post, tmp);
-                    }
+                    //}
                 }
             }
         }
     }
+#endif
 
     delete comp;
 
-    //return n_concat_pre;
+    if(flag_anchor) p_match *= 0.001; //inclined to use anchor R_pre
     return p_match;
 }
 

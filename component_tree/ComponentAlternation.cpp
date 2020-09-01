@@ -31,7 +31,7 @@ char *ComponentAlternation::get_re_part() {
     return re_part;
 }
 
-bool ComponentAlternation::decompose(int &threshold, std::bitset<256> &alpha, char *R_pre, char *R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass) {
+bool ComponentAlternation::decompose(int &threshold, std::bitset<256> &alpha, char *R_pre, char *R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top) {
     //todo
 #if 0  //simple implementation
     for(std::vector<Component*>::iterator it = children.begin(); it != children.end(); it++){
@@ -46,6 +46,7 @@ bool ComponentAlternation::decompose(int &threshold, std::bitset<256> &alpha, ch
     sprintf(R_pre + strlen(R_pre), "(%s)", get_re_part());
     return false;
 #else
+    int _threshold = threshold;
     if(threshold <= 0) return true;
     bool flag_decompose = false;
     std::bitset<256> union_alpha = alpha;
@@ -70,7 +71,65 @@ bool ComponentAlternation::decompose(int &threshold, std::bitset<256> &alpha, ch
         if(flag_decompose) break;
     }
     if(flag_decompose){
-        sprintf(R_post + strlen(R_post), "(%s)", get_re_part());
+        // 前非.* 或非top alternation 或已进行一次alternation分解 --> 不进行altenation分解
+        if(!top || !last_infinite_charclass->all() || !lis_R_pre.empty()){
+            sprintf(R_post + strlen(R_post), "(%s)", get_re_part());
+            return true;
+        }
+        //前.*, try to further decompose and get multiple R_pres and multiple R_posts
+        int tmp_threshold = _threshold;
+        char R_pre_alter[1000];
+        R_pre_alter[0] = '\0';
+        for(auto it=children.begin(); it != children.end(); it++){
+            char tmp_R_pre[1000], tmp_R_post[1000];
+            tmp_R_pre[0] = '\0';
+            tmp_R_post[0] = '\0';
+            int tmp_depth = depth;
+            std::bitset<256> tmp_alpha = alpha;
+            std::bitset<256> tmp_first_charClass = *first_charClass;
+            std::bitset<256> tmp_last_infinite_charclass = *last_infinite_charclass;
+            flag_decompose = (*it)->decompose(tmp_threshold, tmp_alpha, tmp_R_pre, tmp_R_post, tmp_depth, &tmp_first_charClass, &tmp_last_infinite_charclass);
+            if(flag_decompose){
+                if(strlen(R_pre_alter)){ //multile substring conclict
+                    char * s_pre = (char*) malloc(1000);
+                    char * s_post = (char*) malloc(1000);
+                    char tmp[1000];
+                    sprintf(tmp, "(%s)", R_pre_alter);
+                    strcpy(s_pre, tmp);
+                    s_post[0] = '\0';
+                    lis_R_pre.push_back(s_pre);
+                    lis_R_post.push_back(s_post);
+                    it--;//backwards
+                }
+                else{//single substring of alternation decompose
+                    char * s_pre = (char*) malloc(1000);
+                    char * s_post = (char*) malloc(1000);
+                    strcpy(s_pre, tmp_R_pre);
+                    strcpy(s_post, tmp_R_post);
+                    lis_R_pre.push_back(s_pre);
+                    lis_R_post.push_back(s_post);
+                }
+                tmp_threshold = _threshold;
+                R_pre_alter[0] = '\0';
+            }
+            else{
+                char tmp[1000];
+                if(strlen(R_pre_alter)) sprintf(tmp, "|%s", tmp_R_pre);
+                else sprintf(tmp, "%s", tmp_R_pre);
+                strcat(R_pre_alter, tmp);
+            }
+        }
+        //last not appended to lis_R_pre
+        if(strlen(R_pre_alter)){
+            char * s_pre = (char*) malloc(1000);
+            char * s_post = (char*) malloc(1000);
+            char tmp[1000];
+            sprintf(tmp, "(%s)", R_pre_alter);
+            strcpy(s_pre, tmp);
+            s_post[0] = '\0';
+            lis_R_pre.push_back(s_pre);
+            lis_R_post.push_back(s_post);
+        }
         return true;
     }
 

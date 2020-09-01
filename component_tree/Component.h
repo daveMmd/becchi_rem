@@ -7,6 +7,10 @@
 #define DEAFAULT_THRESHOLD 100
 
 #include <bitset>
+#include <list>
+//#include "decompose.h"
+extern std::list<char*> lis_R_pre;
+extern std::list<char*> lis_R_post;
 
 class Component {
 public:
@@ -22,8 +26,9 @@ public:
      * int depth: current depth
      * first_charClass: first char class behind alpha
      * last_infinite_charclass: latest char class with infinite loop(only affect one component), used to help determine first_charClass
+     * bool top: assist to decompose alternation(|)
      * */
-    virtual bool decompose(int &threshold, std::__1::bitset<256> &alpha, char* R_pre, char* R_post, int &depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass) = 0;
+    virtual bool decompose(int &threshold, std::__1::bitset<256> &alpha, char* R_pre, char* R_post, int &depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top = false) = 0;
 
     virtual char* get_re_part() = 0;
     virtual char* get_reverse_re() = 0;

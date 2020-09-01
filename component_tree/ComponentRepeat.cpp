@@ -18,9 +18,13 @@ int ComponentRepeat::num_concat() {
     return sub_comp->num_concat() * repeat;
 }
 
-bool ComponentRepeat::decompose(int &threshold, std::bitset<256> &alpha, char *R_pre, char *R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass) {
+bool ComponentRepeat::decompose(int &threshold, std::bitset<256> &alpha, char *R_pre, char *R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top) {
     if(threshold <= 0) return true;
 
+    char tmp_R_pre[1000], tmp_R_post[1000];
+    tmp_R_pre[0] = '\0';
+    tmp_R_post[0] = '\0';
+    //sprintf(tmp_R_post, "^");
     bool flag_decompose = false;
     int j = max(m_min, m_max);
     int cut;
@@ -46,14 +50,6 @@ bool ComponentRepeat::decompose(int &threshold, std::bitset<256> &alpha, char *R
             }
             threshold -= j;
         }
-        //small @, most additional O(j)
-        /*else if(beta.count() < 10 || alpha.count() < 10){
-            if(threshold - j*2 < 0) {
-                cut = threshold / 2;
-                flag_decompose = true;
-            }
-            threshold -= j*2;
-        }*/
         //not (@ >= #) --> O(j*j)
         else if(j < 5){
             if(threshold - j*j < 0) {
@@ -85,24 +81,30 @@ bool ComponentRepeat::decompose(int &threshold, std::bitset<256> &alpha, char *R
     }
     //(RE){m,n} situation
     else{
-        //todo
-        //if(threshold - num_concat()*j < 0) return true;
-        int tmp_threshold = threshold;
-        char tmp_R_pre[1000], tmp_R_post[1000];
-        tmp_R_pre[0] = '\0'; tmp_R_post[0] = '\0';
-
-        int tmp_depth = depth;
-        flag_decompose = sub_comp->decompose(tmp_threshold, alpha, tmp_R_pre, tmp_R_post, tmp_depth, first_charClass, last_infinite_charclass);
-        if(flag_decompose){
-            cut = 0;
-            goto OUT_IF;
+        cut = 0;
+        for(int i=0; i < m_min; i++)
+        {
+            tmp_R_pre[0] = '\0';
+            //sprintf(tmp_R_post, "^");
+            tmp_R_post[0] = '\0';
+            //assist to process (repeation of alternation)'s decomposition
+            if(top && typeid(*sub_comp) == typeid(ComponentAlternation)) {
+                flag_decompose = sub_comp->decompose(threshold, alpha, tmp_R_pre, tmp_R_post, depth, first_charClass, last_infinite_charclass, top);
+                if(flag_decompose && !lis_R_pre.empty()){
+                    m_min -= 1;
+                    if(m_max != _INFINITY) m_max -= 1;
+                }
+            }
+            else flag_decompose = sub_comp->decompose(threshold, alpha, tmp_R_pre, tmp_R_post, depth, first_charClass, last_infinite_charclass);
+            if(flag_decompose) goto OUT_IF;
+            else cut++;
         }
 
-        int diff = threshold - tmp_threshold;
-        if(diff == 0) diff = 1;//avoid 0 error
-        cut = threshold / diff; //cut>=1
-        if(cut < j){ //need decompose
-            flag_decompose = true;
+        for(int i=0; i < m_max-m_min; i++){
+            char tmp_R_pre2[1000], tmp_R_post2[1000];
+            tmp_R_pre2[0]= '\0'; tmp_R_post2[0] = '\0';
+            flag_decompose = sub_comp->decompose(threshold, alpha, tmp_R_pre2, tmp_R_post2, depth, first_charClass, last_infinite_charclass);
+            if(flag_decompose) goto OUT_IF;;
         }
     }
 
@@ -114,12 +116,15 @@ OUT_IF:
 
         m_min = cut; m_max = cut;
         strcat(R_pre, get_re_part());
+        strcat(R_pre, tmp_R_pre);
+        //strcpy(R_post, tmp_R_post);
+        strcat(R_post, tmp_R_post);
+        if(strlen(tmp_R_pre)) cut++;
 
         m_min = tem_min - cut;
         if(tem_max == _INFINITY) m_max = tem_max;
         else m_max = tem_max - cut;
         strcat(R_post, get_re_part());
-
         return true;
     }
 

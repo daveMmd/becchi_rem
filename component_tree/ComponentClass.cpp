@@ -30,7 +30,7 @@ char *ComponentClass::get_re_part() {
     //return nullptr;
 }
 
-bool ComponentClass::decompose(int &threshold, std::bitset<256> &alpha, char *R_pre, char *R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass) {
+bool ComponentClass::decompose(int &threshold, std::bitset<256> &alpha, char *R_pre, char *R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top) {
     if(threshold <= 0) return true;
     if((charReach&(*last_infinite_charclass)).any()) *first_charClass = (*first_charClass)|charReach;
     last_infinite_charclass->reset();

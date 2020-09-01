@@ -382,7 +382,8 @@ float bram_compatible(char *re, Fb_DFA* &fbdfa, DFA* &ref_dfa){
     if(dfa == nullptr) goto RET;
     dfa->minimize();
     if(dfa->size() > 128){
-        ratio = (dfa->size() - 100) * 1.0 / 128;
+        float times = (dfa->size() - 100) * 1.0 / 128;
+        ratio = times / (times + 1);
         goto RET;
     }
     fb_dfa = new Fb_DFA(dfa);

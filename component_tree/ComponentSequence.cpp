@@ -17,28 +17,17 @@ int ComponentSequence::num_concat() {
     return num;
 }
 
-bool ComponentSequence::decompose(int &threshold, std::bitset<256> &alpha, char* R_pre, char* R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass) {
+bool ComponentSequence::decompose(int &threshold, std::bitset<256> &alpha, char* R_pre, char* R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top) {
     bool res = false;
     for(auto & it : children){
         if(threshold <= 0) res = true;
-        if(!res && it->decompose(threshold, alpha, R_pre, R_post, depth, first_charClass, last_infinite_charclass)){
+        if(!res && it->decompose(threshold, alpha, R_pre, R_post, depth, first_charClass, last_infinite_charclass, top)){
             res = true;
             if(typeid(it) == typeid(ComponentClass)) strcat(R_post, it->get_re_part());
         }
         else if(res){
             strcat(R_post, it->get_re_part());
         }
-        //record first char class
-        /*
-        if(alpha.any() && (alpha & (((ComponentClass*) it)->charReach)).any() \
-        && typeid(*it) == typeid(ComponentClass) && first_charClass == nullptr) first_charClass = &((ComponentClass*) it)->charReach;
-        else if(typeid(*it) == typeid(ComponentRepeat)){
-            Component *sub = ((ComponentRepeat*)(it))->sub_comp;
-            if(typeid(*sub) == typeid(ComponentClass)){
-                if(first_charClass == nullptr) first_charClass = &((ComponentClass*) sub)->charReach;
-                if(((ComponentClass*)sub)->charReach.all() && ((ComponentRepeat*)(it))->m_max == _INFINITY) first_charClass = nullptr;
-            }
-        }*/
     }
     return res;
 }
