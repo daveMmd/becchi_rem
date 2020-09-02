@@ -1311,7 +1311,8 @@ void trace::traverse(list<prefix_DFA*> *prefixDfa_list, FILE *stream) {
     }
     lis_res.sort(mycomp);
     for(auto& it: lis_res){
-        printf("re:%s\n", it.second->re);
+        printf("complete re:%s\n", it.second->complete_re);
+        printf("prefix re:%s\n", it.second->re);
         printf("single_total_states:%u, single_matching_times:%u\n", it.first.first, it.first.second);
     }
 

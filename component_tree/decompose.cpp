@@ -60,10 +60,8 @@ double decompose(char *re, char *R_pre, char *R_post, int threshold, bool contro
             char tmp[1000];
             sprintf(tmp, "%s%s", R_pre, *it);
             strcpy(*it, tmp);
-            //printf("%s\n", tmp);
             sprintf(tmp, "^%s%s", *it2, R_post + 1);
             strcpy(*it2, tmp);
-            //printf("%s\n", tmp);
             it2++;
             //caculate p_match
             Component* comp = parse(*it);

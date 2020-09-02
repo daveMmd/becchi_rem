@@ -12,7 +12,8 @@
  * */
 class prefix_DFA{
 public:
-    char *re; //debug
+    char *complete_re; //for debug : correspond to original rule
+    char *re; //debug: correspond to the re part compiled in dfa
     Fb_DFA* fbDfa;
     DFA* prefix_dfa;
     prefix_DFA* next_node;
@@ -87,7 +88,7 @@ public:
 
     //when match call to get post dfa
     prefix_DFA* get_post_dfa(){
-        if(flag_activate_once) self_silent(); //仅触发一次，因此当前dfa以及当前dfa的夫dfa均不必再匹配
+        if(flag_activate_once) self_silent(); //仅触发一次，因此当前dfa以及当前dfa的父dfa均不必再匹配
         if(flag_activate_once && is_activate) return nullptr;
         is_activate = true;
 

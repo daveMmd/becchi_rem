@@ -71,9 +71,10 @@ bool ComponentRepeat::decompose(int &threshold, std::bitset<256> &alpha, char *R
         if(m_max == _INFINITY){
             alpha = alpha|beta;
             if(m_min != 0) *last_infinite_charclass = beta;
-            else *last_infinite_charclass = (*last_infinite_charclass)|alpha;
+            else *last_infinite_charclass = (*last_infinite_charclass)|beta;
+            //else *last_infinite_charclass = (*last_infinite_charclass)|alpha;
         }
-        else if((beta&(*last_infinite_charclass)).any()){
+        else if((beta&(*last_infinite_charclass)).any()){ //update first_charClass
             *first_charClass = (*first_charClass)|beta;
         }
 
@@ -116,10 +117,10 @@ OUT_IF:
 
         m_min = cut; m_max = cut;
         strcat(R_pre, get_re_part());
-        strcat(R_pre, tmp_R_pre);
+        if(cut < tem_min) strcat(R_pre, tmp_R_pre);
         //strcpy(R_post, tmp_R_post);
         strcat(R_post, tmp_R_post);
-        if(strlen(tmp_R_pre)) cut++;
+        if(cut < tem_min && strlen(tmp_R_pre)) cut++;
 
         m_min = tem_min - cut;
         if(tem_max == _INFINITY) m_max = tem_max;

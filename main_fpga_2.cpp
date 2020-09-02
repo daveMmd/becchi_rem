@@ -411,6 +411,40 @@ float bram_compatible(char *re, Fb_DFA* &fbdfa, DFA* &ref_dfa){
 
 #define T_MATCH 0.0001
 #define PREFIX_DFA_STATES_THRESHOLD 10000
+
+prefix_DFA* compile_prefixDFA(char* R_post){
+    //process empty R_post case
+    if(strlen(R_post) <= 0 || strcmp(R_post, "^") == 0) return nullptr;
+    auto *prefixDfa = new prefix_DFA();
+    //get R_post(s) and DFA(s); try decompose R_post further
+    auto parser = regex_parser(config.i_mod, config.m_mod);
+    while(strlen(R_post) > 0 && strcmp(R_post, "^") != 0){
+        char re_post[1000], R_pre[1000];//, R_post[1000];
+        strcpy(re_post, R_post);
+        decompose(re_post, R_pre, R_post, PREFIX_DFA_STATES_THRESHOLD, true);
+        if(strcmp(R_pre, "^") == 0 || strlen(R_pre) == 0){
+            printf("in compile_prefixDFA() bad re:%s\n", re_post);
+            delete prefixDfa;
+            prefixDfa = nullptr;
+            return prefixDfa;
+        }
+        NFA* nfa = parser.parse_from_regex(R_pre);
+        DFA* dfa = nfa->nfa2dfa();
+        if(dfa == nullptr) fatal("dfa NULL\n");
+        dfa->minimize();
+        //add dfa to prefix_dfa
+        prefixDfa->add_dfa(dfa);
+        //prefixDfa->add_re(re_post);
+        prefixDfa->add_re(R_pre);
+        if(R_post[0] != '^') prefixDfa->set_activate_once();
+
+        //free
+        delete nfa;
+    }
+
+    return prefixDfa;
+}
+
 prefix_DFA* compile_single(char* re){
     Fb_DFA* fbdfa = nullptr;
     DFA* dfa = nullptr;
@@ -450,7 +484,7 @@ prefix_DFA* compile_single(char* re){
     while(strcmp(R_post, "^") != 0){
         char re_post[1000];
         strcpy(re_post, R_post);
-        decompose(re_post, R_pre, R_post, PREFIX_DFA_STATES_THRESHOLD);
+        decompose(re_post, R_pre, R_post, PREFIX_DFA_STATES_THRESHOLD, true);
         if(strcmp(R_pre, "^") == 0 || strlen(R_pre) == 0){
             printf("bad R_post:%s\n", re_post);
             //flag_badpost = true;
@@ -476,45 +510,71 @@ prefix_DFA* compile_single(char* re){
     return prefixDfa;
 }
 
+//extern std::list<char*> lis_R_pre; //used to save multiple R_pres
+//extern std::list<char*> lis_R_post; //used to save multiple R_posts (correspond to lis_R_pre)
+list<prefix_DFA*>* compile_single_to_lis(char* re){
+    Fb_DFA* fbdfa = nullptr;
+    DFA* dfa = nullptr;
+    auto *lis_prefixDfa = new list<prefix_DFA*>();
+    char R_pre[1000], R_post[1000];
 
-prefix_DFA* compile_prefixDFA(char* R_post){
-    //todo
-    prefix_DFA* prefixDfa = new prefix_DFA();
-    //get R_post(s) and DFA(s); try decompose R_post further
-    auto parser = regex_parser(config.i_mod, config.m_mod);
-    while(strlen(R_post) > 0 && strcmp(R_post, "^") != 0){
-        char re_post[1000], R_pre[1000];//, R_post[1000];
-        strcpy(re_post, R_post);
-        decompose(re_post, R_pre, R_post, PREFIX_DFA_STATES_THRESHOLD);
-        if(strcmp(R_pre, "^") == 0 || strlen(R_pre) == 0){
-            printf("in compile_prefixDFA() bad re:%s\n", re_post);
-            delete prefixDfa;
-            prefixDfa = nullptr;
-            return prefixDfa;
+    //get compatible R_pre(s)
+    int threshold = DEAFAULT_THRESHOLD;
+    while(1){
+        double p_match = decompose(re, R_pre, R_post, threshold);
+        if(p_match > T_MATCH && strcmp(re, R_pre) != 0){
+            //todo 尝试提取规则其他部分
+            printf("bad R_pre:%s\n", R_pre);
+            return nullptr;
         }
-        NFA* nfa = parser.parse_from_regex(R_pre);
-        DFA* dfa = nfa->nfa2dfa();
-        if(dfa == nullptr) fatal("dfa NULL\n");
-        dfa->minimize();
-        //add dfa to prefix_dfa
-        prefixDfa->add_dfa(dfa);
-        //prefixDfa->add_re(re_post);
-        prefixDfa->add_re(R_pre);
-        if(R_post[0] != '^') prefixDfa->set_activate_once();
-
-        //free
-        delete nfa;
+        if(lis_R_pre.empty()) {
+            char *tmp_pre = (char *) malloc(1000);
+            char *tmp_post = (char *) malloc(1000);
+            strcpy(tmp_pre, R_pre);
+            strcpy(tmp_post, R_post);
+            lis_R_pre.push_back(tmp_pre);
+            lis_R_post.push_back(tmp_post);
+        }
+        float ratio = 0;
+        for(auto &it: lis_R_pre){
+            ratio = max(ratio, bram_compatible(it, fbdfa, dfa));
+            auto *prefixDfa = new prefix_DFA();
+            prefixDfa->add_dfa(dfa);
+            prefixDfa->add_re(it);
+            prefixDfa->add_fbdfa(fbdfa);
+            lis_prefixDfa->push_back(prefixDfa);
+        }
+        if(ratio <= 0) break;
+        for(auto &it: *lis_prefixDfa) delete it;
+        lis_prefixDfa->clear();
+        threshold = (1-ratio) * threshold;
     }
 
-    return prefixDfa;
+    list<char*> lis_R_post_copy;
+    lis_R_post_copy.clear();
+    for(auto &it :lis_R_post){
+        char *tmp = (char*) malloc(1000);
+        strcpy(tmp, it);
+        lis_R_post_copy.push_back(tmp);
+    }
+
+    auto it_lis = lis_prefixDfa->begin();
+    for(auto &it: lis_R_post_copy){
+        prefix_DFA* prefixDfa = compile_prefixDFA(it);
+        (*it_lis)->next_node = prefixDfa;
+        it_lis++;
+    }
+    return lis_prefixDfa;
 }
 
 //try to extract middle re_part && compile
-prefix_DFA* try_compile_single_mid(char* re){
+//prefix_DFA* try_compile_single_mid(char* re){
+list<prefix_DFA*> * try_compile_single_mid(char* re){
     char R_pre[1000], R_mid[1000], R_post[1000];
     prefix_DFA* prefixDfa_post = nullptr;
     prefix_DFA* prefixDfa_pre = nullptr;
     prefix_DFA* prefixDfa = nullptr;
+    auto *lis_prefixDfa = new list<prefix_DFA*>();
     int depth = 0;
 
     double p_match = extract(re, R_pre, R_mid, R_post, depth);
@@ -555,13 +615,15 @@ prefix_DFA* try_compile_single_mid(char* re){
     prefixDfa->add_fbdfa(fbDfa);
     prefixDfa->parent_node = prefixDfa_pre;
     prefixDfa->next_node = prefixDfa_post;
-    return prefixDfa;
+    lis_prefixDfa->push_back(prefixDfa);
+    return lis_prefixDfa;
 
     FAIL:
     delete prefixDfa_pre;
     delete prefixDfa_post;
     delete fbDfa;
     delete dfa;
+    delete lis_prefixDfa;
     return nullptr;
 }
 
@@ -574,16 +636,21 @@ list<prefix_DFA*> *compile(list<char*> *regex_list){
     FILE* file_debug = fopen("../res/decompose_res.txt", "w");
     for(auto &it: *regex_list){
         printf("processing %d/%d re:%s\n", ++cnt, size, it);
-        prefix_DFA* prefixDfa = compile_single(it);
-        if(prefixDfa == nullptr) prefixDfa = try_compile_single_mid(it);
+        //prefix_DFA* prefixDfa = compile_single(it);
+        list<prefix_DFA*> *prefixDfa_lis = compile_single_to_lis(it);
+        //if(prefixDfa == nullptr) prefixDfa = try_compile_single_mid(it);
+        if(prefixDfa_lis == nullptr || prefixDfa_lis->empty()) prefixDfa_lis = try_compile_single_mid(it);
 
-        if(prefixDfa == nullptr) {
+        if(prefixDfa_lis == nullptr || prefixDfa_lis->empty()) {
             printf("BAD RULE-%d.\n", ++bad_cnt);
             fprintf(file_debug, "BAD RULE-%d:%s\n", bad_cnt, it);
             continue;
         }
-        prefixDfa->debug(file_debug, it);
-        prefix_dfa_list->push_back(prefixDfa);
+        for(auto &it_prefixDfa: *prefixDfa_lis) it_prefixDfa->debug(file_debug, it);
+        for(auto &it_prefixDfa: *prefixDfa_lis) {
+            it_prefixDfa->complete_re = it;
+            prefix_dfa_list->push_back(it_prefixDfa);
+        }
     }
 
     fclose(file_debug);
@@ -606,8 +673,8 @@ void simulate(list<prefix_DFA*> *prefix_dfa_list){
             it--;//need roll back?
         }
     }
-    printf("total_rule_num:%d\n", total_rule_num);
-    printf("benign_rule_num:%d\n", benign_rule_num);
+    printf("total prefixDFA num:%d\n", total_rule_num);
+    printf("benign prefixDFA num:%d\n", benign_rule_num);
 
     //todo
     if (config.trace_file){
@@ -694,7 +761,7 @@ int main(int argc, char **argv){
     printf("compile cost time:%d seconds\n", end.tv_sec - start.tv_sec);
 
     //simulate to examine CPU burden
-    //simulate(prefix_dfa_list);
+    simulate(prefix_dfa_list);
     return 0;
 }
 #endif

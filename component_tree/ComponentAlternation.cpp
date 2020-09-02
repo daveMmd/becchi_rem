@@ -73,7 +73,8 @@ bool ComponentAlternation::decompose(int &threshold, std::bitset<256> &alpha, ch
     if(flag_decompose){
         // 前非.* 或非top alternation 或已进行一次alternation分解 --> 不进行altenation分解
         if(!top || !last_infinite_charclass->all() || !lis_R_pre.empty()){
-            sprintf(R_post + strlen(R_post), "(%s)", get_re_part());
+            //sprintf(R_post + strlen(R_post), "(%s)", get_re_part());
+            strcat(R_post, get_re_part());
             return true;
         }
         //前.*, try to further decompose and get multiple R_pres and multiple R_posts
@@ -133,7 +134,8 @@ bool ComponentAlternation::decompose(int &threshold, std::bitset<256> &alpha, ch
         return true;
     }
 
-    sprintf(R_pre + strlen(R_pre), "(%s)", get_re_part());
+    //sprintf(R_pre + strlen(R_pre), "(%s)", get_re_part());
+    strcat(R_pre, get_re_part());
 
     //update first_charClass && union_last_infinite_charclass
     *first_charClass = union_first_charClass;
