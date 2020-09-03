@@ -1216,6 +1216,10 @@ void trace::traverse(prefix_DFA *prefixDfa, match_statics* statics, FILE *stream
             statics->prefix_match_times++;
             //judge if has pre section, and try match first
             if(pre_match(prefixDfa, statics, stream)){
+#ifdef MATCH_ONCE
+                //only match once. here match occurs
+                if(prefixDfa->next_node == nullptr) return;
+#endif
                 //activate post dfa (next char)
                 prefix_DFA* candidate = prefixDfa->get_post_dfa();
                 if(candidate != nullptr) {
