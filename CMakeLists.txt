@@ -28,7 +28,7 @@ add_executable(regex ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} $
 add_executable(regex_dfas stdinc.cpp int_set.cpp linked_set.cpp dheap.cpp partition.cpp wgraph.cpp cache.cpp nfa.cpp dfa.cpp c_type.cpp ecdfa.cpp hybrid_fa.cpp subset.cpp parser.cpp dfas_memory.cpp fa_memory.cpp main_dfas.cpp trace.cpp)
 add_executable(regex_nfa stdinc.cpp int_set.cpp linked_set.cpp dheap.cpp partition.cpp wgraph.cpp cache.cpp nfa.cpp dfa.cpp c_type.cpp ecdfa.cpp hybrid_fa.cpp subset.cpp parser.cpp dfas_memory.cpp fa_memory.cpp main_nfa.cpp trace.cpp)
 
-add_executable(regex_tracegen ${stdinc} ${int_set} ${linked_set} ${dheap} ${partition} ${wgraph} cache.cpp ${nfa} dfa.cpp c_type.cpp ecdfa.cpp hybrid_fa.cpp subset.cpp parser.cpp dfas_memory.cpp fa_memory.cpp main_tracegen.cpp trace.cpp hierarMerging.cpp)
+add_executable(regex_tracegen Fb_NFA.cpp Fb_DFA.cpp dave_subset.cpp ${stdinc} ${int_set} ${linked_set} ${dheap} ${partition} ${wgraph} cache.cpp ${nfa} dfa.cpp c_type.cpp ecdfa.cpp hybrid_fa.cpp subset.cpp parser.cpp dfas_memory.cpp fa_memory.cpp main_tracegen.cpp trace.cpp hierarMerging.cpp)
 add_executable(regex_gen ${stdinc} main_regexgen.cpp)
 add_executable(regex_new stdinc.cpp int_set.cpp linked_set.cpp dheap.cpp subset.cpp partition.cpp wgraph.cpp nfa.cpp dfa.cpp parser.cpp rcdfa.cpp mdfa.cpp hybrid_fa.cpp main_new.cpp)
 

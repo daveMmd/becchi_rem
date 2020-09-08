@@ -27,6 +27,7 @@ static void usage()
 static struct conf {
     char *regex_file;
     char *trace_file;
+    char *trace_base;
     bool i_mod;
     bool m_mod;
     bool verbose;
@@ -37,6 +38,7 @@ static struct conf {
 void init_conf(){
     config.regex_file=NULL;
     config.trace_file=NULL;
+    config.trace_base = nullptr;
     config.i_mod=false;
     config.m_mod=false;
     config.debug=false;
@@ -84,6 +86,14 @@ static int parse_arguments(int argc, char **argv)
                 return 0;
             }
             config.trace_file=argv[i];
+        }
+        else if(strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--tracebase") == 0){
+            i++;
+            if(i==argc){
+                fprintf(stderr,"Trace base missing.\n");
+                return 0;
+            }
+            config.trace_base=argv[i];
         }else if(strcmp(argv[i], "--m") == 0){
             config.m_mod=true;
         }else if(strcmp(argv[i], "--i") == 0){
@@ -115,6 +125,7 @@ int cmp(const void* p1, const void* p2){
  * 2.try to converge as many small dfa as possible
  * 3.guarantee worst run time
  * */
+#if 0
 void greedy_group(list<Fb_DFA *> *dfa_lis){
     /*sort dfa according size*/
     Fb_DFA *tem_lis[5000];
@@ -153,11 +164,59 @@ void greedy_group(list<Fb_DFA *> *dfa_lis){
         target_dfas[res_cnt++] = dfa;
     }
 
-    printf("target dfa number:%d\n", res_cnt);
-    /*for(int i = 0; i < res_cnt; i++) {
-        printf("#%d dfa size: %d\n", i, target_dfas[i]->size());
-    }*/
+    printf("target dfa number(#brams):%d\n", res_cnt);
+    int merged_fbstates_num = 0;
+    for(int i = 0; i < res_cnt; i++) {
+        //printf("#%d dfa size: %d\n", i, target_dfas[i]->size());
+        merged_fbstates_num += target_dfas[i]->size();
+    }
+    printf("#merged fbstates num:%d\n", merged_fbstates_num);
 }
+#else
+void greedy_group(list<Fb_DFA *> *dfa_lis){
+    /*sort dfa according size*/
+    Fb_DFA *tem_lis[5000];
+    int cnt=0;
+    for(list<Fb_DFA*>::iterator it = dfa_lis->begin(); it != dfa_lis->end(); it++) tem_lis[cnt++] = *it;
+    qsort(tem_lis, cnt, sizeof(Fb_DFA*), cmp);
+
+    Fb_DFA* target_dfas[5000];/*save generated DFA*/
+    memset(target_dfas, 0, sizeof(Fb_DFA*) * 5000);
+    int res_cnt = 0;
+    int beg = 0, end = cnt;
+    for(int i = beg; i < end; i++){
+        Fb_DFA* dfa = tem_lis[i];
+        if(dfa == NULL) continue;/*have been converged*/
+        /*ensure dfa can be put into FPGA alone*/
+        if(!dfa->small_enough()){
+            printf("dfa #%d cannot be put into FPGA alone!\n", i);
+            delete dfa;
+            continue;
+        }
+        /*converge large dfa first*/
+        for(int j = i + 1; j < end; j++){
+            if(tem_lis[j] == NULL) continue;
+            Fb_DFA* dfa2 = tem_lis[j];
+            Fb_DFA* new_dfa = dfa->converge(dfa2);
+            if(new_dfa != NULL){
+                delete dfa2;
+                tem_lis[j] = NULL;
+                delete dfa;
+                dfa = new_dfa;
+            }
+        }
+        target_dfas[res_cnt++] = dfa;
+    }
+
+    printf("target dfa number(#brams):%d\n", res_cnt);
+    int merged_fbstates_num = 0;
+    for(int i = 0; i < res_cnt; i++) {
+        //printf("#%d dfa size: %d\n", i, target_dfas[i]->size());
+        merged_fbstates_num += target_dfas[i]->size();
+    }
+    printf("#merged fbstates num:%d\n", merged_fbstates_num);
+}
+#endif
 
 /*
  * 将regex list中的规则编译到能放置于FPGA的BRAMs中
@@ -632,8 +691,10 @@ list<prefix_DFA*> *compile(list<char*> *regex_list){
     int size = regex_list->size();
     int cnt = 0;
     int bad_cnt = 0;
+    int decompose_cnt = 0;
 
     FILE* file_debug = fopen("../res/decompose_res.txt", "w");
+    FILE* file_decompose_rules = fopen("../ruleset/snort_decompose.re", "w");
     for(auto &it: *regex_list){
         printf("processing %d/%d re:%s\n", ++cnt, size, it);
         //prefix_DFA* prefixDfa = compile_single(it);
@@ -651,9 +712,21 @@ list<prefix_DFA*> *compile(list<char*> *regex_list){
             it_prefixDfa->complete_re = it;
             prefix_dfa_list->push_back(it_prefixDfa);
         }
+        //write decomposed rules to file_decompose_rules
+        bool flag_once = false;
+        for(auto &it_prefixDfa: *prefixDfa_lis){
+            if(it_prefixDfa->next_node == nullptr && it_prefixDfa->parent_node == nullptr) continue;
+            if(flag_once) continue;
+            fprintf(file_decompose_rules, "%s\n", it);
+            flag_once = true;
+            decompose_cnt++;
+        }
     }
 
+    printf("#bad rules: %d, #decompose rules: %d\n", bad_cnt, decompose_cnt);
+
     fclose(file_debug);
+    fclose(file_decompose_rules);
     return prefix_dfa_list;
 }
 
@@ -676,15 +749,50 @@ void simulate(list<prefix_DFA*> *prefix_dfa_list){
     printf("total prefixDFA num:%d\n", total_rule_num);
     printf("benign prefixDFA num:%d\n", benign_rule_num);
 
-    //todo
     if (config.trace_file){
         printf("simulating trace traverse, trace file:%s\n", config.trace_file);
         auto tr=new trace(config.trace_file);
         tr->traverse(prefix_dfa_list);
         delete tr;
     }
+
+    if(config.trace_base){
+        printf("simulating multiple trace traverse, trace base:%s\n", config.trace_base);
+        auto tr=new trace();
+        tr->traverse_multiple(prefix_dfa_list, config.trace_base);
+        delete tr;
+    }
 }
 
+void print_statics(list<prefix_DFA*> *prefix_dfa_list){
+    //#post dfa states
+    int post_states_num = 0;
+    for(auto &it: *prefix_dfa_list){
+        prefix_DFA* node = it->next_node;
+        while(node!=nullptr){
+            post_states_num += node->prefix_dfa->size();
+            node = node->next_node;
+        }
+        node = it->parent_node;
+        while(node!=nullptr){
+            post_states_num += node->prefix_dfa->size();
+            node = node->next_node;
+        }
+    }
+    printf("#post dfa states:%d\n", post_states_num);
+
+    //#prefix dfa states && #prefix fb-dfa states
+    int prefx_states_num = 0;
+    int fb_states_num = 0;
+    for(auto &it: *prefix_dfa_list) {
+        prefx_states_num += it->prefix_dfa->size();
+        fb_states_num += it->fbDfa->size();
+    }
+    printf("#prefix dfa states:%d\n", prefx_states_num);
+    printf("#prefix fb-dfa states:%d\n", fb_states_num);
+
+    //#
+}
 /*
  *  MAIN - entry point
  */
@@ -758,10 +866,25 @@ int main(int argc, char **argv){
     gettimeofday(&start, nullptr);
     list<prefix_DFA*> *prefix_dfa_list = compile(regex_list);
     gettimeofday(&end, nullptr);
-    printf("compile cost time:%d seconds\n", end.tv_sec - start.tv_sec);
+    printf("compile cost time(generating dfa):%d seconds\n", end.tv_sec - start.tv_sec);
+
+#if 1
+    //print statics
+    print_statics(prefix_dfa_list);
+
+    //group fb_dfas
+    list<Fb_DFA*> fbDFA_lis;
+    for(auto &it: *prefix_dfa_list){
+        fbDFA_lis.push_back(it->fbDfa);
+    }
+    gettimeofday(&start, nullptr);
+    greedy_group(&fbDFA_lis);
+    gettimeofday(&end, nullptr);
+    printf("grouping fb_dfa cost time:%d seconds\n", end.tv_sec - start.tv_sec);
+#endif
 
     //simulate to examine CPU burden
-    simulate(prefix_dfa_list);
+    //simulate(prefix_dfa_list);
     return 0;
 }
 #endif

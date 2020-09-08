@@ -41,7 +41,7 @@
 
 #include "trace.h"
 #include "dheap.h"
-
+#include <dirent.h>
 #include <set>
 #include <iterator>
 #include <iostream>
@@ -1279,7 +1279,7 @@ bool mycomp(const pair<pair<uint32_t, uint32_t>, prefix_DFA*> &p1, const pair<pa
     return p1.first.first < p2.first.first;
 }
 
-void trace::traverse(list<prefix_DFA*> *prefixDfa_list, FILE *stream) {
+match_statics trace::traverse(list<prefix_DFA*> *prefixDfa_list, FILE *stream) {
     if (tracefile==NULL) fatal("trace file is NULL!");
     rewind(tracefile);
 
@@ -1292,6 +1292,7 @@ void trace::traverse(list<prefix_DFA*> *prefixDfa_list, FILE *stream) {
     for(c = getc(tracefile); !feof(tracefile); c = getc(tracefile)){
         char_num += 1;
     }
+    statics.char_num = char_num;
     statics.active_state_num_on_character = (unsigned int*) malloc(sizeof(unsigned int) * (char_num + 5));
     memset(statics.active_state_num_on_character, 0, sizeof(unsigned int) * (char_num+5));
 
@@ -1300,12 +1301,12 @@ void trace::traverse(list<prefix_DFA*> *prefixDfa_list, FILE *stream) {
     uint32_t total_states = 0;
     list<pair<pair<uint32_t, uint32_t>, prefix_DFA*>> lis_res;
     for(auto &it: *prefixDfa_list){
-        printf("traversing %d/%d prefixDfa\n", ++tem_cnt, prefixDfa_list->size());
+        //printf("traversing %d/%d prefixDfa\n", ++tem_cnt, prefixDfa_list->size());
         traverse(it, &statics, stream);
         unsigned int single_match_times = statics.prefix_match_times - prefix_matching_times;
         uint32_t single_total_states = statics.total_active_state_num - total_states;
-        printf("matching prefix times:%u\n", single_match_times);
-        printf("total states:%u\n", single_total_states);
+        //printf("matching prefix times:%u\n", single_match_times);
+        //printf("total states:%u\n", single_total_states);
         prefix_matching_times = statics.prefix_match_times;
         total_states = statics.total_active_state_num;
 
@@ -1333,4 +1334,36 @@ void trace::traverse(list<prefix_DFA*> *prefixDfa_list, FILE *stream) {
     cout << statics.average_active_state_num << endl;
     printf("#max_states:");
     cout << max_states_num << endl;
+
+    statics.max_states_num = max_states_num;
+    free(statics.active_state_num_on_character);
+    return statics;
+}
+
+void trace::traverse_multiple(list<prefix_DFA *> *prefixDfa_list, char* file_path, FILE *stream) {
+    unsigned int max_states_num = 0;
+    unsigned int total_active_states_num = 0;
+    unsigned int total_char_num = 0;
+    unsigned int total_prefix_match_times = 0;
+
+    struct dirent *entry;
+    DIR *dp = nullptr;
+    dp = opendir(file_path);
+    if(dp == nullptr) fatal("failed to open dir!\n");
+    while((entry = readdir(dp))){
+        if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        char filename[1000];
+        sprintf(filename, "%s/%s", file_path, entry->d_name);
+        set_trace(filename);
+        match_statics statics = traverse(prefixDfa_list);
+        max_states_num = max(max_states_num, statics.max_states_num);
+        total_active_states_num += statics.total_active_state_num;
+        total_char_num += statics.char_num;
+        total_prefix_match_times += statics.prefix_match_times;
+    }
+    printf("total_prefix_match_times: %u\n", total_prefix_match_times);
+    printf("max_states_num: %u\n", max_states_num);
+    printf("total_active_states_num: %u\n", total_active_states_num);
+    printf("total_char_num: %u\n", total_char_num);
+    printf("average active states num: %llf\n", total_active_states_num*1.0/total_char_num);
 }

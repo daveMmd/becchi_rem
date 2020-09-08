@@ -629,6 +629,14 @@ int regex_parser::process_range(NFA **fa, NFA **to_link, const char *re, int ptr
 		if (to==ESCAPE){
 			int_set *chars=new int_set(CSIZE);
 			ptr=process_escape(re,ptr+1,chars);
+			//add by dave: fix bug
+			if(chars->size() > 1){
+			    for(int i=chars->first; i < CSIZE; i++){
+                    if(chars->item[i]) range->insert(i);
+			    }
+			    delete chars;
+			    continue;
+			}
 			to=chars->head();
 			delete chars;
 		}

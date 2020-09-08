@@ -67,6 +67,8 @@
 #define MATCH_ONCE //dave add: one pattern only report the first match (for prefix_DFA)
 
 struct match_statics_{
+    unsigned int char_num;
+    unsigned int max_states_num;
     unsigned int total_active_state_num;
     double average_active_state_num; //on each character traversed
     unsigned int* active_state_num_on_character;
@@ -115,7 +117,9 @@ public:
 
 	/*dave add: traverses the given prefix_dfa and prints statistics to stream*/
 	void traverse(prefix_DFA* prefixDfa, match_statics *statics, FILE *stream=stdout);
-    void traverse(list<prefix_DFA *> *prefixDfa_list, FILE *stream=stdout);
+    match_statics traverse(list<prefix_DFA *> *prefixDfa_list, FILE *stream=stdout);
+    void traverse_multiple(list<prefix_DFA *> *prefixDfa_list, char* file_path, FILE *stream=stdout);
+
     bool pre_match(prefix_DFA *prefixDfa, match_statics* statics, FILE *stream);
 
 	/* traverses the given ecdfa and prints statistics to stream */ 
