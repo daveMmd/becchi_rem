@@ -741,6 +741,26 @@ void print_statics(list<prefix_DFA*> *prefix_dfa_list){
 
     //#
 }
+
+bool mycomp(prefix_DFA* const &prefixDfa1, prefix_DFA* const &prefixDfa2){
+    return prefixDfa1->fbDfa->size() > prefixDfa2->fbDfa->size();
+}
+/*
+ * print size info of each prefix dfa, help analyse memory cost
+ * */
+void debug_prefix_dfa_size(list<prefix_DFA*> *prefix_dfa_list){
+    FILE* file = fopen("../res/prefix_dfa_size.txt", "w");
+    list<prefix_DFA*> prefixDfa_lis;
+    for(auto &it: *prefix_dfa_list) prefixDfa_lis.push_back(it);
+    prefixDfa_lis.sort(mycomp);
+    for(auto &it: prefixDfa_lis){
+        fprintf(file, "complete re:%s\n", it->complete_re);
+        fprintf(file, "prefix re:%s\n", it->re);
+        fprintf(file, "total sates: %d, cons2states: %d\n\n", it->fbDfa->size(), it->fbDfa->cons2states());
+    }
+
+    fclose(file);
+}
 /*
  *  MAIN - entry point
  */
@@ -817,14 +837,30 @@ int main(int argc, char **argv){
     printf("compile cost time(generating dfa):%d seconds\n", end.tv_sec - start.tv_sec);
 
 #if 1
+    debug_prefix_dfa_size(prefix_dfa_list);
+#endif
+#if 1
     //print statics
     print_statics(prefix_dfa_list);
 
     //group fb_dfas
+    int exact_string_prefix_num = 0;
+    int fstates_inBRAM = 0;
+    int dfastates_inBRAM = 0;
     list<Fb_DFA*> *fbDFA_lis = new list<Fb_DFA*>();
     for(auto &it: *prefix_dfa_list){
+        //prefix regex is exact string, put in single external SRAM instead of internal BRAM
+        if(is_exactString(it->re)){
+            exact_string_prefix_num++;
+            continue;
+        }
+        fstates_inBRAM += it->fbDfa->size();
+        dfastates_inBRAM += it->prefix_dfa->size();
         fbDFA_lis->push_back(it->fbDfa);
     }
+    printf("exact string prefix num:%d\n", exact_string_prefix_num);
+    printf("In BRAM, dfa states num: %d\n",dfastates_inBRAM);
+    printf("In BRAM, four-bit states num: %d\n",fstates_inBRAM);
     gettimeofday(&start, nullptr);
     greedy_group(fbDFA_lis);
     delete fbDFA_lis;

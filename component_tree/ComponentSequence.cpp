@@ -24,21 +24,24 @@ bool ComponentSequence::decompose(double cur_pmatch, int &threshold, std::bitset
     int pos = 0;
     for(auto &it: children){
         pos++;
-        //if(typeid(*it) == typeid(ComponentRepeat) && ((ComponentRepeat*)it)->is_dotstar()){
         if(typeid(*it) == typeid(ComponentRepeat))
             if(((ComponentRepeat*)it)->is_dotstar()) last_dotstar_pos = pos;
     }
-    //printf("last_dotstar_pos:%d\n", last_dotstar_pos);
 
     bool res = false;
     pos = 0;
     double _cur_pmatch = cur_pmatch;
+
+    /*if anchor rule, start_pmatch *= 0.001 (PMATCH_ANCHOR)*/
+    double start_pmatch = 1;
+    if(top && last_infinite_charclass->none()) start_pmatch *= PMATCH_ANCHOR;
+
     for(auto & it : children){
         //printf("pos:%d, cur_match:%llf\n", pos, cur_pmatch);
         pos++;
         //roll-back to try to contain last .*
         if(top && pos <= last_dotstar_pos) cur_pmatch = 2;
-        else if(_cur_pmatch <= 1 && cur_pmatch > 1) cur_pmatch = 1;
+        else if(_cur_pmatch <= 1 && cur_pmatch >= 1) cur_pmatch = start_pmatch;
 
         if(threshold <= 0) res = true;
         if(!res && it->decompose(cur_pmatch, threshold, alpha, R_pre, R_post, depth, first_charClass, last_infinite_charclass, top)){

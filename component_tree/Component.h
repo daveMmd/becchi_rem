@@ -6,6 +6,7 @@
 #define BECCHI_REGEX_COMPONENT_H
 #define DEAFAULT_THRESHOLD 100
 #define PMATCH_THRESHOLD 0.000000000001 //pmatch for five chars 约等于 10^-12
+#define PMATCH_ANCHOR 0.001
 //#define PMATCH_THRESHOLD 0
 
 #include <bitset>

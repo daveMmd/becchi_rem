@@ -154,3 +154,22 @@ void reverse_re(char *re) {
     if(flag_anchor) strcat(re, "$");
     if(flag_tail) re[0] = '^';
 }
+
+bool is_exactString(char *re){
+    Component* comp = parse(re);
+    ComponentSequence *compSeq;
+    ComponentClass *compClass;
+    if(typeid(*comp) != typeid(ComponentSequence)) goto FALSE;
+    compSeq = (ComponentSequence *) comp;
+    for(auto &it: compSeq->children){
+        if(typeid(*it) != typeid(ComponentClass)) goto FALSE;
+        compClass = (ComponentClass *) it;
+        if(compClass->charReach.count() != 1) goto FALSE;
+    }
+    delete comp;
+    return true;
+
+    FALSE:
+    delete comp;
+    return false;
+}
