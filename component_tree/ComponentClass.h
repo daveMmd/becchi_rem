@@ -30,7 +30,7 @@ public:
 
     char* get_reverse_re();
 
-    bool decompose(int &threshold, std::__1::bitset<256> &alpha, char* R_pre, char* R_post, int &depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top = false) override;
+    bool decompose(double cur_pmatch, int &threshold, std::__1::bitset<256> &alpha, char* R_pre, char* R_post, int &depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top) override;
 
     double p_match() override{
         return charReach.count() * 1.0 / charReach.size();

@@ -175,7 +175,7 @@ void greedy_group(list<Fb_DFA *> *dfa_lis){
 #else
 void greedy_group(list<Fb_DFA *> *dfa_lis){
     /*sort dfa according size*/
-    Fb_DFA *tem_lis[5000];
+    Fb_DFA *tem_lis[10000];
     int cnt=0;
     for(list<Fb_DFA*>::iterator it = dfa_lis->begin(); it != dfa_lis->end(); it++) tem_lis[cnt++] = *it;
     qsort(tem_lis, cnt, sizeof(Fb_DFA*), cmp);
@@ -190,7 +190,7 @@ void greedy_group(list<Fb_DFA *> *dfa_lis){
         /*ensure dfa can be put into FPGA alone*/
         if(!dfa->small_enough()){
             printf("dfa #%d cannot be put into FPGA alone!\n", i);
-            delete dfa;
+            //delete dfa;
             continue;
         }
         /*converge large dfa first*/
@@ -199,9 +199,9 @@ void greedy_group(list<Fb_DFA *> *dfa_lis){
             Fb_DFA* dfa2 = tem_lis[j];
             Fb_DFA* new_dfa = dfa->converge(dfa2);
             if(new_dfa != NULL){
-                delete dfa2;
+                //delete dfa2;
                 tem_lis[j] = NULL;
-                delete dfa;
+                //delete dfa;
                 dfa = new_dfa;
             }
         }
@@ -371,63 +371,6 @@ void block_re(list<char*> *re_list){
     printf("filter rules num:%d\n", filter_num);
 }
 
-void decompose_set(list<char*> *regex_list, list<char *> *regex_s1, list<char *> *regex_s2){
-    int bad_cnt = 0;
-    FILE* file = fopen("../res/bad_cannot_decompose.re", "w");
-    for(auto &it: *regex_list){
-        char R_pre[1000], R_post[1000];
-        int n_concat_pre = decompose(it, R_pre, R_post);
-
-        //bad rules
-        if(n_concat_pre < 3 && strcmp(it, R_pre) != 0){
-            //printf("bad rule %d:%s\n", ++bad_cnt, it);
-            fprintf(file, "bad rule %d:%s\n", ++bad_cnt, it);
-            //printf("R_pre:%s\n", R_pre);
-            //printf("R_post:%s\n", R_post);
-            continue;
-        }
-        //未发生分解
-        if(strcmp(R_post, "^") == 0){
-            regex_s1->push_back(it);
-        }
-        else{//发生分解
-            char* s1 = (char*) malloc(1000);
-            //char* s2 = (char*) malloc(1000);
-            char s2[1000];
-            strcpy(s1, R_pre); strcpy(s2, R_post);
-            regex_s1->push_back(s1);
-            //regex_s2->push_back(s2);
-            //try recursively decompose R_post
-            char tmp[10000];
-            tmp[0] = '\0';
-            bool flag_multi_decompose = false;
-            sprintf(tmp + strlen(tmp), "%s\n", R_pre);
-            while(1){
-                decompose(s2, R_pre, R_post, 10000);
-                if(strcmp(R_pre, "^") == 0){
-                    printf("bad R_post:%s\n", s2);
-                    break;
-                }
-                sprintf(tmp + strlen(tmp), "%s\n", R_pre);
-                char* s2_pre = (char*) malloc(1000);
-                strcpy(s2_pre, R_pre);
-                regex_s2->push_back(s2_pre);
-                if(strcmp(R_post, "^") == 0) break;
-                flag_multi_decompose = true;
-                strcpy(s2, R_post);
-            }
-            if(flag_multi_decompose != 0){
-                printf("re:%s\n", it);
-                printf("%s\n", tmp);
-            }
-
-            delete it;
-        }
-    }
-
-    fclose(file);
-}
-
 float bram_compatible(char *re, Fb_DFA* &fbdfa, DFA* &ref_dfa){
     auto parser = regex_parser(config.i_mod, config.m_mod);
     NFA* nfa = nullptr;
@@ -480,7 +423,7 @@ prefix_DFA* compile_prefixDFA(char* R_post){
     while(strlen(R_post) > 0 && strcmp(R_post, "^") != 0){
         char re_post[1000], R_pre[1000];//, R_post[1000];
         strcpy(re_post, R_post);
-        decompose(re_post, R_pre, R_post, PREFIX_DFA_STATES_THRESHOLD, true);
+        decompose(re_post, R_pre, R_post, PREFIX_DFA_STATES_THRESHOLD, false,true);
         if(strcmp(R_pre, "^") == 0 || strlen(R_pre) == 0){
             printf("in compile_prefixDFA() bad re:%s\n", re_post);
             delete prefixDfa;
@@ -543,7 +486,7 @@ prefix_DFA* compile_single(char* re){
     while(strcmp(R_post, "^") != 0){
         char re_post[1000];
         strcpy(re_post, R_post);
-        decompose(re_post, R_pre, R_post, PREFIX_DFA_STATES_THRESHOLD, true);
+        decompose(re_post, R_pre, R_post, PREFIX_DFA_STATES_THRESHOLD, false, true);
         if(strcmp(R_pre, "^") == 0 || strlen(R_pre) == 0){
             printf("bad R_post:%s\n", re_post);
             //flag_badpost = true;
@@ -654,7 +597,6 @@ list<prefix_DFA*> * try_compile_single_mid(char* re){
         if(prefixDfa_post == nullptr) goto FAIL;
     }
 
-
     //compile reverse R_pre to dfa
     if(strlen(R_pre) > 0){
         reverse_re(R_pre);
@@ -663,8 +605,6 @@ list<prefix_DFA*> * try_compile_single_mid(char* re){
         prefixDfa_pre = compile_prefixDFA(R_pre_new);
         if(prefixDfa_pre == nullptr) goto FAIL;
     }
-
-
 
     prefixDfa = new prefix_DFA();
     prefixDfa->depth = depth;
@@ -693,13 +633,12 @@ list<prefix_DFA*> *compile(list<char*> *regex_list){
     int bad_cnt = 0;
     int decompose_cnt = 0;
 
+    FILE* file_multi_decompose = fopen("../res/multi_decompose.txt", "w");
     FILE* file_debug = fopen("../res/decompose_res.txt", "w");
     FILE* file_decompose_rules = fopen("../ruleset/snort_decompose.re", "w");
     for(auto &it: *regex_list){
         printf("processing %d/%d re:%s\n", ++cnt, size, it);
-        //prefix_DFA* prefixDfa = compile_single(it);
         list<prefix_DFA*> *prefixDfa_lis = compile_single_to_lis(it);
-        //if(prefixDfa == nullptr) prefixDfa = try_compile_single_mid(it);
         if(prefixDfa_lis == nullptr || prefixDfa_lis->empty()) prefixDfa_lis = try_compile_single_mid(it);
 
         if(prefixDfa_lis == nullptr || prefixDfa_lis->empty()) {
@@ -707,11 +646,19 @@ list<prefix_DFA*> *compile(list<char*> *regex_list){
             fprintf(file_debug, "BAD RULE-%d:%s\n", bad_cnt, it);
             continue;
         }
+
         for(auto &it_prefixDfa: *prefixDfa_lis) it_prefixDfa->debug(file_debug, it);
         for(auto &it_prefixDfa: *prefixDfa_lis) {
             it_prefixDfa->complete_re = it;
             prefix_dfa_list->push_back(it_prefixDfa);
         }
+
+        //write multi_decompose rules to file_multi_decompose
+        if(prefixDfa_lis->size() > 1){
+            fprintf(file_multi_decompose, "decomposed to %d prefixDFAs\n", prefixDfa_lis->size());
+            fprintf(file_multi_decompose, "RE:%s\n\n", it);
+        }
+
         //write decomposed rules to file_decompose_rules
         bool flag_once = false;
         for(auto &it_prefixDfa: *prefixDfa_lis){
@@ -725,6 +672,7 @@ list<prefix_DFA*> *compile(list<char*> *regex_list){
 
     printf("#bad rules: %d, #decompose rules: %d\n", bad_cnt, decompose_cnt);
 
+    fclose(file_multi_decompose);
     fclose(file_debug);
     fclose(file_decompose_rules);
     return prefix_dfa_list;
@@ -873,18 +821,19 @@ int main(int argc, char **argv){
     print_statics(prefix_dfa_list);
 
     //group fb_dfas
-    list<Fb_DFA*> fbDFA_lis;
+    list<Fb_DFA*> *fbDFA_lis = new list<Fb_DFA*>();
     for(auto &it: *prefix_dfa_list){
-        fbDFA_lis.push_back(it->fbDfa);
+        fbDFA_lis->push_back(it->fbDfa);
     }
     gettimeofday(&start, nullptr);
-    greedy_group(&fbDFA_lis);
+    greedy_group(fbDFA_lis);
+    delete fbDFA_lis;
     gettimeofday(&end, nullptr);
     printf("grouping fb_dfa cost time:%d seconds\n", end.tv_sec - start.tv_sec);
 #endif
 
     //simulate to examine CPU burden
-    //simulate(prefix_dfa_list);
+    simulate(prefix_dfa_list);
     return 0;
 }
 #endif

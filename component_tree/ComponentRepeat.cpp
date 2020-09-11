@@ -18,8 +18,8 @@ int ComponentRepeat::num_concat() {
     return sub_comp->num_concat() * repeat;
 }
 
-bool ComponentRepeat::decompose(int &threshold, std::bitset<256> &alpha, char *R_pre, char *R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top) {
-    if(threshold <= 0) return true;
+bool ComponentRepeat::decompose(double cur_pmatch, int &threshold, std::bitset<256> &alpha, char *R_pre, char *R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top) {
+    if(threshold <= 0 || cur_pmatch < PMATCH_THRESHOLD) return true;
 
     char tmp_R_pre[1000], tmp_R_post[1000];
     tmp_R_pre[0] = '\0';
@@ -27,9 +27,11 @@ bool ComponentRepeat::decompose(int &threshold, std::bitset<256> &alpha, char *R
     //sprintf(tmp_R_post, "^");
     bool flag_decompose = false;
     int j = max(m_min, m_max);
-    int cut;
+    int cut = -1;
     //only consider the situation that sub_comp is char class
     if(typeid(*sub_comp) == typeid(ComponentClass)){
+        int max_cut_forpmatch = 0xfffffff;
+        if(cur_pmatch <= 1 && sub_comp->p_match() < 1) max_cut_forpmatch = ceil(log(PMATCH_THRESHOLD / cur_pmatch) / log(sub_comp->p_match()));
         std::bitset<256> &beta = ((ComponentClass*)sub_comp)->charReach;
         //alpha*beta{j}, when alpha < beta || alpha ^ beta && alpha^beta!=beta 发生O(j^2)状态膨胀
         if(last_infinite_charclass->any() && ((*last_infinite_charclass) & beta).any() && ((*last_infinite_charclass) & beta) != beta){
@@ -67,6 +69,12 @@ bool ComponentRepeat::decompose(int &threshold, std::bitset<256> &alpha, char *R
             threshold = 0;
         }
 
+        //check if reach decompose for pmatch
+        if(cut >= max_cut_forpmatch || j >= max_cut_forpmatch){
+            cut = max_cut_forpmatch;
+            flag_decompose = true;
+        }
+
         //update alpha
         if(m_max == _INFINITY){
             alpha = alpha|beta;
@@ -86,26 +94,27 @@ bool ComponentRepeat::decompose(int &threshold, std::bitset<256> &alpha, char *R
         for(int i=0; i < m_min; i++)
         {
             tmp_R_pre[0] = '\0';
-            //sprintf(tmp_R_post, "^");
             tmp_R_post[0] = '\0';
             //assist to process (repeation of alternation)'s decomposition
             if(top && typeid(*sub_comp) == typeid(ComponentAlternation)) {
-                flag_decompose = sub_comp->decompose(threshold, alpha, tmp_R_pre, tmp_R_post, depth, first_charClass, last_infinite_charclass, top);
+                flag_decompose = sub_comp->decompose(cur_pmatch, threshold, alpha, tmp_R_pre, tmp_R_post, depth, first_charClass, last_infinite_charclass, top);
                 if(flag_decompose && !lis_R_pre.empty()){
                     m_min -= 1;
                     if(m_max != _INFINITY) m_max -= 1;
                 }
             }
-            else flag_decompose = sub_comp->decompose(threshold, alpha, tmp_R_pre, tmp_R_post, depth, first_charClass, last_infinite_charclass);
+            else flag_decompose = sub_comp->decompose(cur_pmatch, threshold, alpha, tmp_R_pre, tmp_R_post, depth, first_charClass, last_infinite_charclass);
             if(flag_decompose) goto OUT_IF;
             else cut++;
+            //update cur_pmatch
+            if(cur_pmatch <= 1) cur_pmatch = cur_pmatch * sub_comp->p_match();
         }
 
         for(int i=0; i < m_max-m_min; i++){
             char tmp_R_pre2[1000], tmp_R_post2[1000];
             tmp_R_pre2[0]= '\0'; tmp_R_post2[0] = '\0';
-            flag_decompose = sub_comp->decompose(threshold, alpha, tmp_R_pre2, tmp_R_post2, depth, first_charClass, last_infinite_charclass);
-            if(flag_decompose) goto OUT_IF;;
+            flag_decompose = sub_comp->decompose(2, threshold, alpha, tmp_R_pre2, tmp_R_post2, depth, first_charClass, last_infinite_charclass);
+            if(flag_decompose) goto OUT_IF;
         }
     }
 
@@ -174,4 +183,11 @@ double ComponentRepeat::p_match() {
 
 char *ComponentRepeat::get_reverse_re() {
     return get_re_part();
+}
+
+bool ComponentRepeat::is_dotstar() {
+    if(m_max == _INFINITY && typeid(*sub_comp) == typeid(ComponentClass)){
+        if(((ComponentClass*)sub_comp)->p_match() > 200.0 / 256) return true;
+    }
+    return false;
 }

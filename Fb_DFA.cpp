@@ -149,9 +149,11 @@ void Fb_DFA::to_dot(char *fname, char *title) {
 
     for (state_t s=0;s<_size;s++){
         if(!is_accept[s])
-            fprintf(file, " %ld [shape=circle,label=\"%ld-%ld\"];\n", s, s/17, s%17);
+            //fprintf(file, " %ld [shape=circle,label=\"%ld-%ld\"];\n", s, s/17, s%17);
+            fprintf(file, " %ld [shape=circle,label=\"%ld\"];\n", s, s);
         else
-            fprintf(file, " %ld [shape=doublecircle,label=\"%ld-%ld\"];\n", s, s/17, s%17);
+            //fprintf(file, " %ld [shape=doublecircle,label=\"%ld-%ld\"];\n", s, s/17, s%17);
+            fprintf(file, " %ld [shape=doublecircle,label=\"%ld\"];\n", s, s);
     }
     int csize = 16;
     int *mark=allocate_int_array(csize);

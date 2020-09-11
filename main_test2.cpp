@@ -2,6 +2,7 @@
 #include "stdinc.h"
 #include "parser.h"
 #include "ecdfa.h"
+#include "Fb_DFA.h"
 // #include "ecdfal.h"
 #include "ecdfab.h"
 #include "rcdfa.h"
@@ -161,7 +162,15 @@ int main(int argc, char **argv){
             printf("nfa2dfa cost time:%d seconds\n", end.tv_sec - start.tv_sec);
             printf("initial dfa size:%d\n", dfa->size());
             dfa->minimize();
+            FILE* file3 = fopen("../res/dfa_minimise.dot", "w");
+            dfa->to_dot(file3, "dfa_minimise");
             printf("minimised dfa size:%d\n", dfa->size());
+
+            Fb_DFA* fbDfa = new Fb_DFA(dfa);
+            fbDfa->to_dot("../res/fbDfa_original.dot", "fbDfa_original");
+            Fb_DFA* minimise_fbDfa = fbDfa->minimise2();
+            minimise_fbDfa->to_dot("../res/fbDfa.dot", "fbDfa");
+            printf("minimised fbDfa size:%d\n", minimise_fbDfa->size());
 		}
 		/*
 		dfas = parser->parse_to_dfa(re_file);

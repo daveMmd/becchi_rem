@@ -19,7 +19,7 @@
  * */
 std::list<char*> lis_R_pre; //used to save multiple R_pres
 std::list<char*> lis_R_post; //used to save multiple R_posts (correspond to lis_R_pre)
-double decompose(char *re, char *R_pre, char *R_post, int threshold, bool control_top) {
+double decompose(char *re, char *R_pre, char *R_post, int threshold, bool use_pmatch, bool control_top) {
     double p_match = 0;
     //init R_pre and R_post
     R_pre[0] = '\0';
@@ -48,8 +48,12 @@ double decompose(char *re, char *R_pre, char *R_post, int threshold, bool contro
     first_charClass.reset();
     if(flag_anchor) last_infinite_charclass.reset();
     else last_infinite_charclass.set();
-    if(!control_top) comp_tree->decompose(threshold, alpha, R_pre, R_post, depth, &first_charClass, &last_infinite_charclass, true);
-    else comp_tree->decompose(threshold, alpha, R_pre, R_post, depth, &first_charClass, &last_infinite_charclass);
+
+    double cur_pmatch = 2;
+    if(use_pmatch) cur_pmatch = 1;
+    comp_tree->decompose(cur_pmatch, threshold, alpha, R_pre, R_post, depth, &first_charClass, &last_infinite_charclass, !control_top);
+    //if(!control_top) comp_tree->decompose(cur_pmatch, threshold, alpha, R_pre, R_post, depth, &first_charClass, &last_infinite_charclass, true);
+    //else comp_tree->decompose(cur_pmatch, threshold, alpha, R_pre, R_post, depth, &first_charClass, &last_infinite_charclass);
     delete comp_tree;
 
     /*try get lis_R_pre and lis_R_post*/

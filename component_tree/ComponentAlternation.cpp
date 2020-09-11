@@ -31,23 +31,10 @@ char *ComponentAlternation::get_re_part() {
     return re_part;
 }
 
-bool ComponentAlternation::decompose(int &threshold, std::bitset<256> &alpha, char *R_pre, char *R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top) {
-    //todo
-#if 0  //simple implementation
-    for(std::vector<Component*>::iterator it = children.begin(); it != children.end(); it++){
-        threshold -= (*it)->num_concat();
-    }
-    if(threshold < 0) return true;
+bool ComponentAlternation::decompose(double cur_pmatch, int &threshold, std::bitset<256> &alpha, char *R_pre, char *R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top) {
+    if(threshold <= 0 || cur_pmatch < PMATCH_THRESHOLD) return true;
 
-    /*if(strlen(R_pre) != 0){
-        sprintf(R_pre + strlen(R_pre), "(%s)", get_re_part());
-    }
-    else strcat(R_pre, get_re_part());*/
-    sprintf(R_pre + strlen(R_pre), "(%s)", get_re_part());
-    return false;
-#else
     int _threshold = threshold;
-    if(threshold <= 0) return true;
     bool flag_decompose = false;
     std::bitset<256> union_alpha = alpha;
     std::bitset<256> union_first_charClass = *first_charClass;
@@ -61,7 +48,8 @@ bool ComponentAlternation::decompose(int &threshold, std::bitset<256> &alpha, ch
         std::bitset<256> tmp_alpha = alpha;
         std::bitset<256> tmp_first_charClass = *first_charClass;
         std::bitset<256> tmp_last_infinite_charclass = *last_infinite_charclass;
-        flag_decompose = it->decompose(tmp_threshold, tmp_alpha, tmp_R_pre, tmp_R_post, tmp_depth, &tmp_first_charClass, &tmp_last_infinite_charclass);
+        //set cur_pmath to 2, for not desire to decompose in alternation
+        flag_decompose = it->decompose(2, tmp_threshold, tmp_alpha, tmp_R_pre, tmp_R_post, tmp_depth, &tmp_first_charClass, &tmp_last_infinite_charclass);
         union_alpha = union_alpha | tmp_alpha;
         union_first_charClass = union_first_charClass | tmp_first_charClass;
         union_last_infinite_charclass = union_last_infinite_charclass | tmp_last_infinite_charclass;
@@ -89,7 +77,13 @@ bool ComponentAlternation::decompose(int &threshold, std::bitset<256> &alpha, ch
             std::bitset<256> tmp_alpha = alpha;
             std::bitset<256> tmp_first_charClass = *first_charClass;
             std::bitset<256> tmp_last_infinite_charclass = *last_infinite_charclass;
-            flag_decompose = (*it)->decompose(tmp_threshold, tmp_alpha, tmp_R_pre, tmp_R_post, tmp_depth, &tmp_first_charClass, &tmp_last_infinite_charclass);
+
+            //when prefix is long, cut accrording to p_match will get multiple REs
+            //if(strlen(R_pre) > 5) flag_decompose = (*it)->decompose(2, tmp_threshold, tmp_alpha, tmp_R_pre, tmp_R_post, tmp_depth, &tmp_first_charClass, &tmp_last_infinite_charclass);
+            //else flag_decompose = (*it)->decompose(cur_pmatch, tmp_threshold, tmp_alpha, tmp_R_pre, tmp_R_post, tmp_depth, &tmp_first_charClass, &tmp_last_infinite_charclass);
+            //try not split alternation for p_match
+            flag_decompose = (*it)->decompose(2, tmp_threshold, tmp_alpha, tmp_R_pre, tmp_R_post, tmp_depth, &tmp_first_charClass, &tmp_last_infinite_charclass);
+
             if(flag_decompose){
                 if(strlen(R_pre_alter)){ //multile substring conclict
                     char * s_pre = (char*) malloc(1000);
@@ -148,8 +142,8 @@ bool ComponentAlternation::decompose(int &threshold, std::bitset<256> &alpha, ch
 
     //update alpha
     alpha = union_alpha;
+
     return false;
-#endif
 }
 
 ComponentAlternation::~ComponentAlternation() {

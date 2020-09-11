@@ -11,7 +11,7 @@
  * 将一条规则分解为不发生（或有限）规则膨胀的规则前缀(R_pre)和规则后缀(R_post)
  * return: R_pre's p_match
  * */
-double decompose(char* re, char* R_pre, char* R_post, int threshold = DEAFAULT_THRESHOLD, bool control_top = false);
+double decompose(char* re, char* R_pre, char* R_post, int threshold = DEAFAULT_THRESHOLD, bool use_pmatch = true, bool control_top = false);
 
 /*
 * 分解规则中匹配概率最低的长度确定的子部分

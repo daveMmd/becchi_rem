@@ -5,6 +5,8 @@
 #ifndef BECCHI_REGEX_COMPONENT_H
 #define BECCHI_REGEX_COMPONENT_H
 #define DEAFAULT_THRESHOLD 100
+#define PMATCH_THRESHOLD 0.000000000001 //pmatch for five chars 约等于 10^-12
+//#define PMATCH_THRESHOLD 0
 
 #include <bitset>
 #include <list>
@@ -19,6 +21,7 @@ public:
     virtual double p_match() = 0;
 
     /*
+     * double cur_pmatch: cur p_matchh, (> 1 not to update it thus not use it)
      * threshold: desired max #states
      * alpha: former char class with infinite loop
      * R_pre: target re prefix
@@ -28,7 +31,7 @@ public:
      * last_infinite_charclass: latest char class with infinite loop(only affect one component), used to help determine first_charClass
      * bool top: assist to decompose alternation(|)
      * */
-    virtual bool decompose(int &threshold, std::__1::bitset<256> &alpha, char* R_pre, char* R_post, int &depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top = false) = 0;
+    virtual bool decompose(double cur_pmatch, int &threshold, std::__1::bitset<256> &alpha, char* R_pre, char* R_post, int &depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top = false) = 0;
 
     virtual char* get_re_part() = 0;
     virtual char* get_reverse_re() = 0;

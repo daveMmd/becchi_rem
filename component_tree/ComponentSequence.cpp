@@ -17,17 +17,39 @@ int ComponentSequence::num_concat() {
     return num;
 }
 
-bool ComponentSequence::decompose(int &threshold, std::bitset<256> &alpha, char* R_pre, char* R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top) {
+bool ComponentSequence::decompose(double cur_pmatch, int &threshold, std::bitset<256> &alpha, char* R_pre, char* R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top) {
+    if(cur_pmatch < PMATCH_THRESHOLD) return true;
+
+    int last_dotstar_pos = 0; //to locate the position of the last .*
+    int pos = 0;
+    for(auto &it: children){
+        pos++;
+        //if(typeid(*it) == typeid(ComponentRepeat) && ((ComponentRepeat*)it)->is_dotstar()){
+        if(typeid(*it) == typeid(ComponentRepeat))
+            if(((ComponentRepeat*)it)->is_dotstar()) last_dotstar_pos = pos;
+    }
+    //printf("last_dotstar_pos:%d\n", last_dotstar_pos);
+
     bool res = false;
+    pos = 0;
+    double _cur_pmatch = cur_pmatch;
     for(auto & it : children){
+        //printf("pos:%d, cur_match:%llf\n", pos, cur_pmatch);
+        pos++;
+        //roll-back to try to contain last .*
+        if(top && pos <= last_dotstar_pos) cur_pmatch = 2;
+        else if(_cur_pmatch <= 1 && cur_pmatch > 1) cur_pmatch = 1;
+
         if(threshold <= 0) res = true;
-        if(!res && it->decompose(threshold, alpha, R_pre, R_post, depth, first_charClass, last_infinite_charclass, top)){
+        if(!res && it->decompose(cur_pmatch, threshold, alpha, R_pre, R_post, depth, first_charClass, last_infinite_charclass, top)){
             res = true;
-            if(typeid(it) == typeid(ComponentClass)) strcat(R_post, it->get_re_part());
+            if(typeid(*it) == typeid(ComponentClass)) strcat(R_post, it->get_re_part());
         }
         else if(res){
             strcat(R_post, it->get_re_part());
         }
+        //update cur_pmatch. for cur_pmatch > 1, not to update
+        if(cur_pmatch <= 1) cur_pmatch = cur_pmatch * it->p_match();
     }
     return res;
 }
