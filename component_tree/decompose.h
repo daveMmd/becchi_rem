@@ -26,4 +26,6 @@ double extract(char *re, char *R_pre, char* R_middle, char *R_post, int &depth, 
 void reverse_re(char* re);
 
 bool is_exactString(char *re);
+
+bool contain_dotstar(char *re);
 #endif //BECCHI_REGEX_DECOMPOSE_H

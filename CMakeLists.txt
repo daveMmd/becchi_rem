@@ -32,12 +32,12 @@ add_executable(regex_tracegen Fb_NFA.cpp Fb_DFA.cpp dave_subset.cpp ${stdinc} ${
 add_executable(regex_gen ${stdinc} main_regexgen.cpp)
 add_executable(regex_new stdinc.cpp int_set.cpp linked_set.cpp dheap.cpp subset.cpp partition.cpp wgraph.cpp nfa.cpp dfa.cpp parser.cpp rcdfa.cpp mdfa.cpp hybrid_fa.cpp main_new.cpp)
 
-add_executable(regex_test2 dave_subset.cpp Fb_NFA.cpp Fb_DFA.cpp stdinc.cpp linked_set.cpp partition.cpp wgraph.cpp dheap.cpp subset.cpp nfa.cpp dfa.cpp int_set.cpp parser.cpp c_type.cpp ecdfa.cpp ecdfab.cpp rcdfa.cpp bitdfa.cpp rledfa.cpp orledfa.cpp main_test2.cpp)
+add_executable(regex_test2 dave_subset.cpp Fb_NFA.cpp Fb_DFA.cpp stdinc.cpp linked_set.cpp partition.cpp wgraph.cpp dheap.cpp subset.cpp nfa.cpp dfa.cpp int_set.cpp parser.cpp c_type.cpp ecdfa.cpp ecdfab.cpp rcdfa.cpp bitdfa.cpp rledfa.cpp orledfa.cpp main_test2.cpp hierarMerging.cpp)
 add_executable(regex_nmdfa stdinc.cpp int_set.cpp linked_set.cpp subset.cpp dheap.cpp partition.cpp wgraph.cpp nfa.cpp dfa.cpp c_type.cpp ecdfa.cpp parser.cpp nmdfa.cpp main_nmdfa.cpp)
 add_executable(regex_becchi stdinc.cpp int_set.cpp linked_set.cpp subset.cpp dheap.cpp partition.cpp wgraph.cpp nfa.cpp dfa.cpp c_type.cpp ecdfa.cpp parser.cpp becchi.cpp main_becchi.cpp)
 
-add_executable(regex_dave ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} main_dave.cpp ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp dave_util.cpp dave_nfa.cpp)# dave_nfa.cpp
-add_executable(test_dave test_dave.cpp)
+#add_executable(regex_dave ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} main_dave.cpp ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp dave_util.cpp dave_nfa.cpp)# dave_nfa.cpp
+#add_executable(test_dave test_dave.cpp)
 
 add_executable(regex_hfa ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} main_testhfa.cpp ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp hierarMerging.cpp dave_nfa.cpp hfadump.cpp set.cpp)
 

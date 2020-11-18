@@ -12,6 +12,7 @@
 #include "parser.h"
 #include "prefix_DFA.h"
 #include "trace.h"
+#include "hierarMerging.h"
 
 int VERBOSE;
 int DEBUG;
@@ -185,6 +186,7 @@ void greedy_group(list<Fb_DFA *> *dfa_lis){
     int res_cnt = 0;
     int beg = 0, end = cnt;
     for(int i = beg; i < end; i++){
+        //printf("processing %d/%d fb_dfa.\n", i, cnt);
         Fb_DFA* dfa = tem_lis[i];
         if(dfa == NULL) continue;/*have been converged*/
         /*ensure dfa can be put into FPGA alone*/
@@ -383,8 +385,8 @@ float bram_compatible(char *re, Fb_DFA* &fbdfa, DFA* &ref_dfa){
     dfa = nfa->nfa2dfa();
     if(dfa == nullptr) goto RET;
     dfa->minimize();
-    if(dfa->size() > 128){
-        float times = (dfa->size() - 100) * 1.0 / 128;
+    if(dfa->size() > MAX_STATES_NUMBER/2){
+        float times = (dfa->size() - MAX_STATES_NUMBER/2) * 1.0 / (MAX_STATES_NUMBER/2);
         ratio = times / (times + 1);
         goto RET;
     }
@@ -539,6 +541,8 @@ list<prefix_DFA*>* compile_single_to_lis(char* re){
         }
         float ratio = 0;
         for(auto &it: lis_R_pre){
+            fbdfa = nullptr;
+            dfa = nullptr;
             ratio = max(ratio, bram_compatible(it, fbdfa, dfa));
             auto *prefixDfa = new prefix_DFA();
             prefixDfa->add_dfa(dfa);
@@ -639,7 +643,10 @@ list<prefix_DFA*> *compile(list<char*> *regex_list){
     for(auto &it: *regex_list){
         printf("processing %d/%d re:%s\n", ++cnt, size, it);
         list<prefix_DFA*> *prefixDfa_lis = compile_single_to_lis(it);
-        if(prefixDfa_lis == nullptr || prefixDfa_lis->empty()) prefixDfa_lis = try_compile_single_mid(it);
+        if(prefixDfa_lis == nullptr || prefixDfa_lis->empty()) {
+            prefixDfa_lis = try_compile_single_mid(it);
+            //printf("middle extract re:%s\n", it);
+        }
 
         if(prefixDfa_lis == nullptr || prefixDfa_lis->empty()) {
             printf("BAD RULE-%d.\n", ++bad_cnt);
@@ -761,6 +768,40 @@ void debug_prefix_dfa_size(list<prefix_DFA*> *prefix_dfa_list){
 
     fclose(file);
 }
+
+void test_anchor_explosion(list<char *> *regex_list){
+    list<char*> anchor_rules;
+    int anchor_rule_num = 0;
+    for(auto &it: *regex_list){
+        if(it[0] == '^')
+        {
+            anchor_rule_num++;
+            anchor_rules.push_back(it);
+        }
+    }
+    printf("anchor rules num: %d\n", anchor_rule_num);
+
+    int total_size = 0;
+    list<DFA*> *anchor_dfas = new list<DFA*>();
+    for(auto &it: anchor_rules){
+        prefix_DFA* prefixDfa = compile_prefixDFA(it);
+        anchor_dfas->push_back(prefixDfa->prefix_dfa);
+        total_size += prefixDfa->prefix_dfa->size();
+    }
+    printf("anchor dfas total size: %d\n", total_size);
+
+    DFA* anchor_one_dfa = hm_dfalist2dfa(anchor_dfas);
+    printf("anchor one dfa size: %d\n", anchor_one_dfa->size());
+}
+
+void count_dotstar(list<char *> *regex_list){
+    int cnt = 0;
+    for(auto& it: *regex_list){
+        if(contain_dotstar(it)) cnt++;
+    }
+    printf("# regexes containing dot_star:%d\n", cnt);
+}
+
 /*
  *  MAIN - entry point
  */
@@ -831,10 +872,18 @@ int main(int argc, char **argv){
     //过滤一些暂不支持，或者耗时/影响性能的规则
     block_re(regex_list);
 
+    //test anchor rules whether introduce state explosion
+    //test_anchor_explosion(regex_list);
+    //return 0;
+
+    //count the regexes with ".*"-like part
+    //count_dotstar(regex_list);
+    //return 0;
+
     gettimeofday(&start, nullptr);
     list<prefix_DFA*> *prefix_dfa_list = compile(regex_list);
     gettimeofday(&end, nullptr);
-    printf("compile cost time(generating dfa):%d seconds\n", end.tv_sec - start.tv_sec);
+    printf("compile cost time(generating dfa):%llf seconds\n", (end.tv_sec - start.tv_sec) + 0.000001 * (end.tv_usec - start.tv_usec));
 
 #if 1
     debug_prefix_dfa_size(prefix_dfa_list);
@@ -852,7 +901,8 @@ int main(int argc, char **argv){
         //prefix regex is exact string, put in single external SRAM instead of internal BRAM
         if(is_exactString(it->re)){
             exact_string_prefix_num++;
-            continue;
+            //control is put exact string in BRAM
+            //continue;
         }
         fstates_inBRAM += it->fbDfa->size();
         dfastates_inBRAM += it->prefix_dfa->size();
@@ -865,7 +915,8 @@ int main(int argc, char **argv){
     greedy_group(fbDFA_lis);
     delete fbDFA_lis;
     gettimeofday(&end, nullptr);
-    printf("grouping fb_dfa cost time:%d seconds\n", end.tv_sec - start.tv_sec);
+    printf("grouping fb_dfa cost time:%llf seconds\n", (end.tv_sec - start.tv_sec) + 0.000001 * (end.tv_usec - start.tv_usec));
+
 #endif
 
     //simulate to examine CPU burden
@@ -873,3 +924,5 @@ int main(int argc, char **argv){
     return 0;
 }
 #endif
+
+//this is evaluation branch

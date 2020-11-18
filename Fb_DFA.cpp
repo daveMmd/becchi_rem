@@ -32,6 +32,7 @@ Fb_DFA::Fb_DFA(DFA *dfa) {
     //init
     dead_state = NO_STATE;
     cons2state_num = -1;
+    smallsate_num = -1;
     _size = 17 * dfa->size();// each node plus 16 new nodes --> 17 nodes
     state_table = (state_t **) malloc(sizeof(state_t *) * (_size + 5));
     for(int i = 0; i < _size + 5; i++){
@@ -88,6 +89,7 @@ state_t Fb_DFA::add_state() {
 Fb_DFA::Fb_DFA() {
     dead_state = NO_STATE;
     cons2state_num = -1;
+    smallsate_num = -1;
     _size = 0;
     entry_allocated = 1000;
 
@@ -274,9 +276,9 @@ int Fb_DFA::cons2states() {
 
 Fb_DFA *Fb_DFA::converge(Fb_DFA *dfa) {
     /*1.filter: assume convergence will definitely cause a increase of state num*/
-    if(this->size() + dfa->size() > 256) return nullptr;
-    int big_states_num = (this->size() - this->cons2states()) + (dfa->size() - dfa->cons2states());
-    if(big_states_num > 137) return nullptr;
+    if(this->size() + dfa->size() > MAX_STATES_NUMBER*1.2) return nullptr;
+    int big_states_num = this->get_large_states_num() + dfa->get_large_states_num();//(this->size() - this->cons2states()) + (dfa->size() - dfa->cons2states());
+    if(big_states_num > MAX_BIG_SATES_NUMBER*1.2) return nullptr;
 
     /*2.merge 2 dfas*/
     Fb_DFA* new_dfa = new Fb_DFA();
@@ -303,7 +305,7 @@ Fb_DFA *Fb_DFA::converge(Fb_DFA *dfa) {
             state_t next_state;
             if(it == mapping.end()){
                 next_state = new_dfa->add_state();
-                if(next_state > 256){
+                if(next_state > MAX_STATES_NUMBER){
                     delete new_dfa;
                     return nullptr;
                 }
@@ -318,29 +320,30 @@ Fb_DFA *Fb_DFA::converge(Fb_DFA *dfa) {
         }
     }
 
+    //minimise, time-consuming
+    Fb_DFA* minimise_dfa = new_dfa;//= new_dfa->minimise2();
+    //delete new_dfa;
+
     /*Accuratly filter*/
-    if(!new_dfa->small_enough()){
-        delete new_dfa;
+    if(!minimise_dfa->small_enough()){
+        delete minimise_dfa;
         return nullptr;
     }
 
-    return new_dfa;
+    return minimise_dfa;
 }
 
 /*
- * 1.at most 256 states
- * 2.at most 137 big states(cannot be compressed)
+ * 1.at most MAX_STATES_NUMBER states
+ * 2.at most MAX_BIG_SATES_NUMBER big states(cannot be compressed)
  * */
 bool Fb_DFA::small_enough() {
-    if(size() > 256 || size() - cons2states() > 137){
-        //fprintf(stderr, "dfa cannot be put into FPGA alone!\n");
-        return false;
-    }
-    return true;
+    return !(size() > MAX_STATES_NUMBER || get_large_states_num() > MAX_BIG_SATES_NUMBER);
 }
 
 int Fb_DFA::get_large_states_num() {
-    return this->size() - this->cons2states();
+    //return this->size() - this->cons2states();
+    return this->size() - this->get_smallstate_num();
 }
 
 float Fb_DFA::get_ratio() {
@@ -348,10 +351,10 @@ float Fb_DFA::get_ratio() {
     if(small_enough()) return 0;
 
     int large_states_num = get_large_states_num();
-    float times = (large_states_num - 120) * 1.0 / 120; //tigten 137 to 120
+    float times = (large_states_num - MAX_BIG_SATES_NUMBER + 5) * 1.0 / (MAX_BIG_SATES_NUMBER - 5); //tigten MAX_BIG_SATES_NUMBER to MAX_BIG_SATES_NUMBER - 5
     float ratio1 = times / (times + 1);
 
-    times = (size() - 220) * 1.0 / 220; //tigten 256 to 220
+    times = (size() - MAX_STATES_NUMBER + 5) * 1.0 / (MAX_STATES_NUMBER - 5); //tigten MAX_STATES_NUMBER to MAX_STATES_NUMBER - 5
     float ratio2 = times / (times + 1);
 
     return max(ratio1, ratio2);
@@ -502,4 +505,18 @@ Fb_DFA *Fb_DFA::minimise2() {
     return reduced_dfa;
 }
 
-state_t Fb_DFA::get_next_state(state_t state, int c) {return state_table[state][c]; };
+state_t Fb_DFA::get_next_state(state_t state, int c) {return state_table[state][c]; }
+
+//less than or equal to two target states
+int Fb_DFA::get_smallstate_num() {
+    if(smallsate_num != -1) return smallsate_num;
+    int cnt = 0;
+    for(int s = 0; s < _size; s++){
+        set<state_t> states;
+        states.clear();
+        for(int c = 0; c < 16; c++) states.insert(state_table[s][c]);
+        if(states.size() <= 2) cnt++;
+    }
+    smallsate_num = cnt;
+    return cnt;
+};

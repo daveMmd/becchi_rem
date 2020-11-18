@@ -31,7 +31,7 @@ bool ComponentRepeat::decompose(double cur_pmatch, int &threshold, std::bitset<2
     //only consider the situation that sub_comp is char class
     if(typeid(*sub_comp) == typeid(ComponentClass)){
         int max_cut_forpmatch = 0xfffffff;
-        if(cur_pmatch <= 1 && sub_comp->p_match() < 1) max_cut_forpmatch = ceil(log(PMATCH_THRESHOLD / cur_pmatch) / log(sub_comp->p_match()));
+        if(PMATCH_THRESHOLD > 0 && cur_pmatch <= 1 && sub_comp->p_match() < 1) max_cut_forpmatch = ceil(log(PMATCH_THRESHOLD / cur_pmatch) / log(sub_comp->p_match()));
         std::bitset<256> &beta = ((ComponentClass*)sub_comp)->charReach;
         //alpha*beta{j}, when alpha < beta || alpha ^ beta && alpha^beta!=beta 发生O(j^2)状态膨胀
         if(last_infinite_charclass->any() && ((*last_infinite_charclass) & beta).any() && ((*last_infinite_charclass) & beta) != beta){
@@ -187,7 +187,7 @@ char *ComponentRepeat::get_reverse_re() {
 
 bool ComponentRepeat::is_dotstar() {
     if(m_max == _INFINITY && typeid(*sub_comp) == typeid(ComponentClass)){
-        if(((ComponentClass*)sub_comp)->p_match() > 200.0 / 256) return true;
+        if(((ComponentClass*)sub_comp)->p_match() > 240.0 / 256) return true;
     }
     return false;
 }

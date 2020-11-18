@@ -98,10 +98,10 @@ int RCDFA::match(FILE *file){
   state_t current = 0;
   unsigned int c = fgetc(file); 
   while(c!=EOF){
-    list_re * re_list = range_edges_table[current];
+    list_re * re_list = range_edges_table[current]; //one memory access
   	int finded = 0;
-  	for(list_re::iterator it= re_list->begin();it!=re_list->end();++it){
-  		if(c >= (*it)->start && c <= (*it)->end){
+  	for(list_re::iterator it= re_list->begin();it!=re_list->end();++it){ //one memory access
+  		if(c >= (*it)->start && c <= (*it)->end){ //one (or more) memory access
   			current = (*it) -> target;
   			finded = 1;
   			break;

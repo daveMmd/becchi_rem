@@ -4,7 +4,8 @@
 
 #ifndef BECCHI_REGEX_FB_DFA_H
 #define BECCHI_REGEX_FB_DFA_H
-
+#define MAX_BIG_SATES_NUMBER 100
+#define MAX_STATES_NUMBER 212
 
 #include "dfa.h"
 //#include "Fb_NFA.h"
@@ -12,6 +13,7 @@
 class Fb_DFA {
 private:
     int cons2state_num;
+    int smallsate_num;
     int entry_allocated;
 public:
     /* state involving no progression */
@@ -42,6 +44,7 @@ public:
     int size();
     int less2states();
     int cons2states();
+    int get_smallstate_num();
     int get_large_states_num();
 
     Fb_DFA* converge(Fb_DFA *);

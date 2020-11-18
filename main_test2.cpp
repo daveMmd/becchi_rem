@@ -9,6 +9,7 @@
 #include "bitdfa.h"
 #include "orledfa.h"
 #include "rledfa.h"
+#include "hierarMerging.h"
 
 #ifndef CUR_VER
 #define CUR_VER		"SHMTU 1.5.0"
@@ -136,6 +137,24 @@ int main(int argc, char **argv){
 	} 
 
 	dfa_set *dfas=NULL;
+
+#if 0
+	//hierarchical merging DFA list
+    if(config.regex_file!=NULL) {
+        FILE *re_file=fopen(config.regex_file,"r");
+        regex_parser *parser=new regex_parser(config.i_mod,config.m_mod);
+        int size;
+        list<NFA*> *nfa_list = parser->parse_to_list(re_file, &size);
+        while(!nfa_list->empty()){
+            list<NFA*> tem_nfas;
+            tem_nfas.insert(tem_nfas.begin(), nfa_list->begin(), nfa_list->end());
+            DFA* dfa = hm_nfa2dfa(&tem_nfas);
+            dfa->minimize();
+            printf("#regexs: %d, dfa size:%d\n", nfa_list->size(), dfa->size());
+            nfa_list->pop_front();
+        }
+    }
+#endif
 
 	if(config.regex_file!=NULL){
 		FILE *re_file=fopen(config.regex_file,"r");

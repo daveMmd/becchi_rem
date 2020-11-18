@@ -173,3 +173,14 @@ bool is_exactString(char *re){
     delete comp;
     return false;
 }
+
+bool contain_dotstar(char *re){
+    Component* comp = parse(re);
+    if(typeid(*comp) != typeid(ComponentSequence)) return false;
+    ComponentSequence* compSeq = (ComponentSequence*) comp;
+    for(auto& it: compSeq->children){
+        if(typeid(*it) != typeid(ComponentRepeat)) continue;
+        if(((ComponentRepeat*)it)->is_dotstar()) return true;
+    }
+    return false;
+}

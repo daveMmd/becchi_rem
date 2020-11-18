@@ -244,6 +244,8 @@ DFA *hm_dfalist2dfa(list<DFA*> *dfa_list, int k, bool improved){
     dfa_list->pop_front();
     delete dfa_list;
 
+    //add on 2020.09.11
+    finalDFA->minimize();
     return finalDFA;
 }
 
@@ -258,10 +260,11 @@ DFA *hm_nfa2dfa(list<NFA*> *nfa_list, int k, bool improved)
     list<DFA*> *dfa_list = new list<DFA*>();
     list<NFA*>::iterator it_nfa;
 
+    int sum_dfa_size = 0;
 #pragma omp parallel for default(shared)
     for(int i=0; i<size; i++)
     {
-        fprintf(stderr, "single nfa2dfa %d/%d\n", i+1, size);
+        //fprintf(stderr, "single nfa2dfa %d/%d\n", i+1, size);
         NFA *nfa;
 #pragma omp critical (section1)
         {
@@ -274,6 +277,8 @@ DFA *hm_nfa2dfa(list<NFA*> *nfa_list, int k, bool improved)
         //nfa->reduce();
         //fprintf(stderr, "nfa size: %d\n", nfa->size());
         DFA* dfa = nfa->nfa2dfa();
+        dfa->minimize();
+        sum_dfa_size += dfa->size();
         //fprintf(stderr, "dfa size: %d\n", dfa->size());
         //DFA* dfa = nfa->smallSize_nfa2dfa();
 #pragma omp critical (section2)
@@ -281,14 +286,15 @@ DFA *hm_nfa2dfa(list<NFA*> *nfa_list, int k, bool improved)
             dfa_list->push_back(dfa);
         }
         //fprintf(stderr, "single dfa size:%d\n", dfa->size());
-        delete nfa;
+        //delete nfa;
     }
+    printf("sum_dfa_size: %d\n", sum_dfa_size);
     time(&end_t);
-    fprintf(stderr, "step1 single nfa2dfa time: %f seconds.\n", difftime(end_t, start_t));
+    //fprintf(stderr, "step1 single nfa2dfa time: %f seconds.\n", difftime(end_t, start_t));
     //step2 hierarchical merging
     unsigned long dfa_amount = size;
     while(dfa_amount != 1){
-        fprintf(stderr,"dfa_amout:%d\n", dfa_amount);
+        //fprintf(stderr,"dfa_amout:%d\n", dfa_amount);
         list<DFA*> *next_round_dfa_lis = new list<DFA*>();
 #pragma omp parallel for default(shared)
         for(int i=0; i<((dfa_amount-1)/k + 1); i++)
