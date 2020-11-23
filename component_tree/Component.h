@@ -18,6 +18,8 @@ extern std::list<char*> lis_R_post;
 
 class Component {
 public:
+    virtual ~Component() = default;
+
     virtual int num_concat() = 0;
 
     virtual double p_match() = 0;

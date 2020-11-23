@@ -3,6 +3,7 @@
 //
 
 #include <vector>
+#include <bitset>
 #include "Fb_DFA.h"
 #include "Fb_NFA.h"
 
@@ -30,6 +31,7 @@ Fb_NFA* reverse2nfa(Fb_DFA* dfa){
 
 Fb_DFA::Fb_DFA(DFA *dfa) {
     //init
+    accept_to_prefix_dfa = NULL;
     dead_state = NO_STATE;
     cons2state_num = -1;
     smallsate_num = -1;
@@ -87,6 +89,7 @@ state_t Fb_DFA::add_state() {
 }
 
 Fb_DFA::Fb_DFA() {
+    accept_to_prefix_dfa = nullptr;
     dead_state = NO_STATE;
     cons2state_num = -1;
     smallsate_num = -1;
@@ -104,9 +107,13 @@ Fb_DFA::Fb_DFA() {
 }
 
 Fb_DFA::~Fb_DFA() {
-    delete is_accept;
-    for(int s = 0; s < _size; s++) delete state_table[s];
-    delete state_table;
+    free(is_accept);
+    for(int s = 0; s < _size; s++) free(state_table[s]);
+    free(state_table);
+    if(accept_to_prefix_dfa != nullptr){
+        for(int s = 0; s < _size; s++) delete accept_to_prefix_dfa[s];
+    }
+    free(accept_to_prefix_dfa);
 }
 
 void Fb_DFA::add_transition(state_t s, int c, state_t d) {
@@ -152,14 +159,14 @@ void Fb_DFA::to_dot(char *fname, char *title) {
     for (state_t s=0;s<_size;s++){
         if(!is_accept[s])
             //fprintf(file, " %ld [shape=circle,label=\"%ld-%ld\"];\n", s, s/17, s%17);
-            fprintf(file, " %ld [shape=circle,label=\"%ld\"];\n", s, s);
+            fprintf(file, " %u [shape=circle,label=\"%u\"];\n", s, s);
         else
             //fprintf(file, " %ld [shape=doublecircle,label=\"%ld-%ld\"];\n", s, s/17, s%17);
-            fprintf(file, " %ld [shape=doublecircle,label=\"%ld\"];\n", s, s);
+            fprintf(file, " %u [shape=doublecircle,label=\"%u\"];\n", s, s);
     }
     int csize = 16;
     int *mark=allocate_int_array(csize);
-    char *label=NULL;
+    char *label= nullptr;
     char *temp=(char *)malloc(100);
     state_t target=NO_STATE;
     for (state_t s=0;s<_size;s++){
@@ -202,10 +209,10 @@ void Fb_DFA::to_dot(char *fname, char *title) {
                     }
                 }
             }
-            if (label!=NULL) {
-                fprintf(file, "%ld -> %ld [label=\"%s\"];\n", s,target,label);
+            if (label!= nullptr) {
+                fprintf(file, "%u -> %u [label=\"%s\"];\n", s,target,label);
                 free(label);
-                label=NULL;
+                label= nullptr;
             }
         }
         //if (default_tx!=NULL) fprintf(file, "%ld -> %ld [color=\"limegreen\"];\n", s,default_tx[s]);
@@ -226,19 +233,6 @@ int Fb_DFA::less2states() {
         set<state_t> states;
         for(int c = 0; c < 16; c++) states.insert(state_table[s][c]);
         if(states.size() <= 2) res++;
-        /*int cnt_states = 0;
-        for(int c = 0; c < 16; c++){
-            bool flag = false;
-            for(int c_pre = 0; c_pre < c; c++){
-                if(state_table[s][c] == state_table[s][c_pre]){
-                    flag = true;
-                    break;
-                }
-            }
-            if(!flag) cnt_states++;
-            if(cnt_states > 2) break;
-        }
-        if(cnt_states <= 2) res++;*/
     }
     return res;
 }
@@ -274,14 +268,45 @@ int Fb_DFA::cons2states() {
     return res;
 }
 
+void try_insert_new_accept(Fb_DFA *dfa1, Fb_DFA *dfa2, Fb_DFA *newdfa, state_t s1, state_t s2, state_t news){
+    if(!dfa1->is_accept[s1] && !dfa2->is_accept[s2]) return;
+    newdfa->is_accept[news] = 1;
+    newdfa->accept_to_prefix_dfa[news] = new list<uint16_t >();
+    list<uint16_t >* newa = newdfa->accept_to_prefix_dfa[news];
+    list<uint16_t >* a1 = dfa1->accept_to_prefix_dfa[s1];
+    list<uint16_t >* a2 = dfa2->accept_to_prefix_dfa[s2];
+    if(a1 != nullptr) newa->insert(newa->end(), a1->begin(), a1->end());
+    if(a2 != nullptr) newa->insert(newa->end(), a2->begin(), a2->end());
+}
+
+/*dfa will not change*/
+void init_accept_rules(Fb_DFA* dfa){
+    if(dfa->accept_to_prefix_dfa == nullptr){
+        dfa->accept_to_prefix_dfa = (list<uint16_t >**) malloc(sizeof(list<uint16_t>*) * dfa->_size);
+        for(state_t s = 0; s < dfa->_size; s++) {
+            if(dfa->is_accept[s]) {
+                dfa->accept_to_prefix_dfa[s] = new list<uint16_t>();
+                dfa->accept_to_prefix_dfa[s]->push_back(dfa->ind_prefixdfa_single);
+            }
+            else dfa->accept_to_prefix_dfa[s] = nullptr;
+        }
+    }
+}
+
 Fb_DFA *Fb_DFA::converge(Fb_DFA *dfa) {
     /*1.filter: assume convergence will definitely cause a increase of state num*/
     if(this->size() + dfa->size() > MAX_STATES_NUMBER*1.2) return nullptr;
     int big_states_num = this->get_large_states_num() + dfa->get_large_states_num();//(this->size() - this->cons2states()) + (dfa->size() - dfa->cons2states());
     if(big_states_num > MAX_BIG_SATES_NUMBER*1.2) return nullptr;
 
+    //init the two dfa`s accept_rule_list
+    init_accept_rules(this);
+    init_accept_rules(dfa);
+
     /*2.merge 2 dfas*/
     Fb_DFA* new_dfa = new Fb_DFA();
+    new_dfa->accept_to_prefix_dfa = (list<uint16_t >**) malloc(sizeof(list<uint16_t>*) * new_dfa->entry_allocated);
+    for(state_t s=0; s < entry_allocated; s++) new_dfa->accept_to_prefix_dfa[s] = nullptr;
     list<state_t> queue;
     list<pair<state_t, state_t>> mapping_queue;
     map<pair<state_t, state_t>, state_t> mapping;
@@ -291,13 +316,14 @@ Fb_DFA *Fb_DFA::converge(Fb_DFA *dfa) {
     mapping_queue.push_back(make_pair(0, 0));
     mapping[make_pair(0, 0)] = start;
     /*todo: ACCEPTING*/
-    if(is_accept[0] || dfa->is_accept[0]) new_dfa->is_accept[start] = 1;
+    try_insert_new_accept(this, dfa, new_dfa, 0, 0, 0);
 
     while(!queue.empty()){
         state_t cur_state = queue.front(); queue.pop_front();
         pair<state_t, state_t> cur_pair = mapping_queue.front(); mapping_queue.pop_front();
         /*todo: ACCEPTING*/
-        if(is_accept[cur_pair.first] || dfa->is_accept[cur_pair.second]) new_dfa->is_accept[cur_state] = 1;
+        //if(is_accept[cur_pair.first] || dfa->is_accept[cur_pair.second]) new_dfa->is_accept[cur_state] = 1;
+        try_insert_new_accept(this, dfa, new_dfa, cur_pair.first, cur_pair.second, cur_state);
 
         for(int c = 0; c < 16; c++){
             pair<state_t, state_t> destination_pair(state_table[cur_pair.first][c], dfa->state_table[cur_pair.second][c]);
@@ -519,4 +545,119 @@ int Fb_DFA::get_smallstate_num() {
     }
     smallsate_num = cnt;
     return cnt;
+}
+
+void *bits2ptr(bitset<20480> &bits){
+    char* mem = (char *)malloc(sizeof(char)*5*512);
+    for(int i=0; i<20480/8; i++){
+        char tem = 0;
+        for(int j = 0; j < 8; j++){
+            tem = tem | (bits[8*i+j] << (7-j));
+        }
+        mem[i] = tem;
+    }
+    return mem;
+}
+
+/*
+ * 前100个状态用classical编码，后112个状态用bitmap编码 （100*4 + 112 == 512）
+ *
+ * */
+void* Fb_DFA::to_BRAM(uint16_t dfaid, map<uint32_t, list<uint16_t>* > *mapping_table) {
+    if(size() > MAX_STATES_NUMBER || get_large_states_num() > MAX_BIG_SATES_NUMBER){
+        fprintf(stderr, "Error: fb_dfa size too large (cannot be placed into BRAM)\n");
+        return nullptr;
+    }
+
+    /*state renumber (put big states in front)*/
+    int big_num = 0;
+    int small_num = get_large_states_num();
+    int map[256];
+    for(state_t state=0; state<_size; state++){
+        if(is_bigstate(state)) map[state] = big_num++;
+        else map[state] = small_num++;
+    }
+
+    //refresh accept table and transition table
+    int new_accept[256];
+    int new_statetable[256][16];
+    for(state_t state=0; state<_size; state++){
+        state_t newstate = map[state];
+        if(is_accept[state])
+        {
+            new_accept[newstate] = 1;
+            /*记录state renumber之后mapping table*/
+            uint32_t key = (dfaid * MAX_STATES_NUMBER) + newstate;
+            //auto lis = new list<uint16_t>();
+            //lis->insert(lis->begin(), accept_to_prefix_dfa[state]->begin(), accept_to_prefix_dfa[state]->end());
+            (*mapping_table)[key] = accept_to_prefix_dfa[state]; //指针易被释放 //lis;
+        }
+        else new_accept[newstate] = 0;
+
+        for(int c=0; c<16; c++)
+        {
+            state_t newtarget = map[state_table[state][c]];
+            new_statetable[newstate][c] = newtarget;
+        }
+    }
+    /*generate m20k memory*/
+    bitset<20480> bits;
+    int cur = 0;
+    for(state_t state = 0; state < _size; state++){
+        if(state < MAX_BIG_SATES_NUMBER){
+            /*classical encoding*/
+            for(int c=0; c<16; c++){
+                state_t target = new_statetable[state][c];
+                for(int i = 0; i < 8; i++){
+                    if(target & (1<<(7-i))) bits[cur++] = 1;
+                    else bits[cur++] = 0;
+                }
+                if(new_accept[target]) bits[cur++] = 1;
+                else bits[cur++] = 0;
+                //补齐40位
+                if((c+1) % 4 == 0) cur += 4;
+            }
+        }
+        else{
+            /*bitmap encoding*/
+            state_t target1 = new_statetable[state][0];
+            bits[cur++] = 0;
+            state_t target2 = NO_STATE;
+            //write bitmap
+            for(int c=1; c<16; c++){
+                if(new_statetable[state][c] == target1) bits[cur++] = 0;
+                else{
+                    target2 = new_statetable[state][c];
+                    bits[cur++] = 1;
+                }
+            }
+            //write target1
+            for(int i = 0; i < 8; i++){
+                if(target1 & (1<<(7-i))) bits[cur++] = 1;
+                else bits[cur++] = 0;
+            }
+            if(new_accept[target1]) bits[cur++] = 1;
+            else bits[cur++] = 0;
+
+            //write target2
+            for(int i = 0; i < 8; i++){
+                if(target2 & (1<<(7-i))) bits[cur++] = 1;
+                else bits[cur++] = 0;
+            }
+            if(target2 != NO_STATE && new_accept[target2]) bits[cur++] = 1;
+            else bits[cur++] = 0;
+
+            //补齐40位
+            cur += 6;
+        }
+    }
+    return bits2ptr(bits);
+}
+
+bool Fb_DFA::is_bigstate(state_t s) {
+    set<state_t> states;
+    states.clear();
+    for(int c = 0; c < 16; c++) states.insert(state_table[s][c]);
+    if(states.size() <= 2) return false;
+    return true;
 };

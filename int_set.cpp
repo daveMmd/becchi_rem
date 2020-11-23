@@ -86,26 +86,26 @@ void int_set::operator=(int_set& L) {
 }
 
 void int_set::insert(unsigned int i){
-	if (i < 0 || i > N) fatal("int_set::insert: item out of range");
+	if (i < 0 || i > N) fatal((char*)"int_set::insert: item out of range");
 	if (first==UNDEF || first > i) first=i;
 	if (!item[i]) num_el++;
 	item[i]=true;
 }
 
 void int_set::remove(unsigned int i)	{
-	if (i < 0 || i > N) fatal("int_set::remove: item out of range");
+	if (i < 0 || i > N) fatal((char*)"int_set::remove: item out of range");
 	if (first==i) first=suc(i);
 	if (item[i])num_el--;
 	item[i]=false;
 }
 
-bool int_set::mbr(unsigned int i){		
-	if (i < 0 || i > N) fatal("int_set::mbr: item out of range");
+bool int_set::mbr(unsigned int i) const{
+	if (i < 0 || i > N) fatal((char*)"int_set::mbr: item out of range");
 	return (item[i]);
 }	
 
-unsigned int int_set::suc(unsigned int i){
-	if (i < 0 || i > N) fatal("int_set::suc: item out of range");
+unsigned int int_set::suc(unsigned int i) const{
+	if (i < 0 || i > N) fatal((char*)"int_set::suc: item out of range");
 	if (!item[i] || i==N) return UNDEF;
 	for (unsigned int j=i+1;j<=N;j++)
 		if (item[j]) return j;

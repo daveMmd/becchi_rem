@@ -45,7 +45,7 @@ void *allocate_array(int size, size_t element_size)
 {
 	void *mem = malloc( size * element_size );
 	if ( ! mem )
-		fatal("allocate_array():: memory allocation failed");
+		fatal((char*)"allocate_array():: memory allocation failed");
 	memset(mem, 0, size*element_size);
 	return mem;
 }
@@ -54,7 +54,7 @@ void *reallocate_array( void *array, int size, size_t element_size)
 {
 	void *new_array = realloc( array, element_size * size );
 	if ( ! new_array )
-		fatal("reallocate_array():: memory reallocation failed");
+		fatal((char*)"reallocate_array():: memory reallocation failed");
     //memset(new_array, 0, size*element_size);
 	return new_array;
 }

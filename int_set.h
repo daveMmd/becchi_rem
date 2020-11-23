@@ -58,11 +58,11 @@ public:		int_set(unsigned int=100); 	//constructor
 	void	operator=(int_set&);	// set assignment
 	void	insert(unsigned int);	// insert item in set
 	void	remove(unsigned int);	// remove item from set
-	bool	mbr(unsigned int);		// return true if member of set
+	bool	mbr(unsigned int) const;		// return true if member of set
 	bool	empty();				// return true if set is empty
 	unsigned int size();         	// return size of set
 	unsigned int head();			// return first element - for browsing
-	unsigned int suc(unsigned int); // return successor in set - browsing routing
+	unsigned int suc(unsigned int) const; // return successor in set - browsing routing
 	void	clear();				// remove everything
 	void    reset(unsigned int);    // reset the set
 	void	print();				// print the items on list

@@ -2,6 +2,7 @@
 // Created by 钟金诚 on 2020/8/17.
 //
 
+#include <ctime>
 #include <sys/time.h>
 #include "stdinc.h"
 #include "nfa.h"
@@ -12,7 +13,6 @@
 #include "parser.h"
 #include "prefix_DFA.h"
 #include "trace.h"
-#include "hierarMerging.h"
 
 int VERBOSE;
 int DEBUG;
@@ -111,8 +111,8 @@ static int parse_arguments(int argc, char **argv)
 void check_file(char *filename, char *mode){
     FILE *file=fopen(filename,mode);
     if (file==NULL){
-        fprintf(stderr,"Unable to open file %s in %c mode",filename,mode);
-        fatal("\n");
+        fprintf(stderr,"Unable to open file %s in %s mode",filename,mode);
+        fatal((char*)"\n");
     }else fclose(file);
 }
 
@@ -126,69 +126,21 @@ int cmp(const void* p1, const void* p2){
  * 2.try to converge as many small dfa as possible
  * 3.guarantee worst run time
  * */
-#if 0
-void greedy_group(list<Fb_DFA *> *dfa_lis){
-    /*sort dfa according size*/
-    Fb_DFA *tem_lis[5000];
-    int cnt=0;
-    for(list<Fb_DFA*>::iterator it = dfa_lis->begin(); it != dfa_lis->end(); it++) tem_lis[cnt++] = *it;
-    qsort(tem_lis, cnt, sizeof(Fb_DFA*), cmp);
-    //debug
-    //for(int i=0; i<cnt; i++) printf("%d ", tem_lis[i]->size());
-    //printf("\n");
-
-    Fb_DFA* target_dfas[5000];/*save generated DFA*/
-    memset(target_dfas, 0, sizeof(Fb_DFA*) * 5000);
-    int res_cnt = 0;
-    int beg = 0, end = cnt;
-    for(int i = beg; i < end; i++){
-        Fb_DFA* dfa = tem_lis[i];
-        if(dfa == NULL) continue;/*have been converged*/
-        /*ensure dfa can be put into FPGA alone*/
-        if(!dfa->small_enough()){
-            printf("dfa #%d cannot be put into FPGA alone!\n", i);
-            delete dfa;
-            continue;
-        }
-        /*converge small dfa first*/
-        for(int j = end - 1; j > i; j--){
-            if(tem_lis[j] == NULL) continue;
-            Fb_DFA* dfa2 = tem_lis[j];
-            Fb_DFA* new_dfa = dfa->converge(dfa2);
-            if(new_dfa != NULL){
-                delete dfa2;
-                tem_lis[j] = NULL;
-                delete dfa;
-                dfa = new_dfa;
-            }
-        }
-        target_dfas[res_cnt++] = dfa;
-    }
-
-    printf("target dfa number(#brams):%d\n", res_cnt);
-    int merged_fbstates_num = 0;
-    for(int i = 0; i < res_cnt; i++) {
-        //printf("#%d dfa size: %d\n", i, target_dfas[i]->size());
-        merged_fbstates_num += target_dfas[i]->size();
-    }
-    printf("#merged fbstates num:%d\n", merged_fbstates_num);
-}
-#else
-void greedy_group(list<Fb_DFA *> *dfa_lis){
+Fb_DFA** greedy_group(list<Fb_DFA *> *dfa_lis, int& fbdfa_num){
     /*sort dfa according size*/
     Fb_DFA *tem_lis[10000];
     int cnt=0;
     for(list<Fb_DFA*>::iterator it = dfa_lis->begin(); it != dfa_lis->end(); it++) tem_lis[cnt++] = *it;
     qsort(tem_lis, cnt, sizeof(Fb_DFA*), cmp);
 
-    Fb_DFA* target_dfas[5000];/*save generated DFA*/
+    Fb_DFA** target_dfas = (Fb_DFA**) malloc(sizeof(Fb_DFA*) * 5000);//5000];/*save generated DFA*/
     memset(target_dfas, 0, sizeof(Fb_DFA*) * 5000);
     int res_cnt = 0;
     int beg = 0, end = cnt;
     for(int i = beg; i < end; i++){
         //printf("processing %d/%d fb_dfa.\n", i, cnt);
         Fb_DFA* dfa = tem_lis[i];
-        if(dfa == NULL) continue;/*have been converged*/
+        if(dfa == nullptr) continue;/*have been converged*/
         /*ensure dfa can be put into FPGA alone*/
         if(!dfa->small_enough()){
             printf("dfa #%d cannot be put into FPGA alone!\n", i);
@@ -197,18 +149,20 @@ void greedy_group(list<Fb_DFA *> *dfa_lis){
         }
         /*converge large dfa first*/
         for(int j = i + 1; j < end; j++){
-            if(tem_lis[j] == NULL) continue;
+            if(tem_lis[j] == nullptr) continue;
             Fb_DFA* dfa2 = tem_lis[j];
             Fb_DFA* new_dfa = dfa->converge(dfa2);
-            if(new_dfa != NULL){
+            if(new_dfa != nullptr){
                 //delete dfa2;
-                tem_lis[j] = NULL;
+                tem_lis[j] = nullptr;
                 //delete dfa;
                 dfa = new_dfa;
             }
         }
         target_dfas[res_cnt++] = dfa;
     }
+
+    fbdfa_num = res_cnt;
 
     printf("target dfa number(#brams):%d\n", res_cnt);
     int merged_fbstates_num = 0;
@@ -217,134 +171,8 @@ void greedy_group(list<Fb_DFA *> *dfa_lis){
         merged_fbstates_num += target_dfas[i]->size();
     }
     printf("#merged fbstates num:%d\n", merged_fbstates_num);
-}
-#endif
 
-/*
- * 将regex list中的规则编译到能放置于FPGA的BRAMs中
- * */
-void compile_front_end(list<char*> *regex_list){
-    struct timeval gstart, gend;
-    FILE* file = fopen("../res/debug_frontend.txt", "w");
-
-    regex_parser *parse=new regex_parser(config.i_mod,config.m_mod);
-    printf("REs to NFAs ing...\n");
-    gettimeofday(&gstart, NULL);
-    list<NFA *>* nfa_list = parse->parse_to_list_from_regexlist(regex_list);
-    gettimeofday(&gend, NULL);
-    printf("REs to NFAs cost time:%d seconds\n", gend.tv_sec - gstart.tv_sec);
-    delete parse;
-
-    printf("NFAs to DFAs ing...\n");
-    gettimeofday(&gstart, NULL);
-    int size = nfa_list->size();
-    list<Fb_DFA *> *fb_dfa_lis = new list<Fb_DFA *>();
-    for(int i = 0; i < size; i++){
-        struct timeval start, end;
-        gettimeofday(&start, NULL);
-        if(i % 1 == 0) printf("%d/%d\n", i, size);
-        NFA* nfa = nfa_list->front();
-        printf("now processing re: %s\n", nfa->pattern);
-        nfa_list->pop_front();
-        //nfa->remove_epsilon(); //can be omitted? toverify todo
-        //nfa->reduce();
-        DFA* dfa=nfa->nfa2dfa();
-        if (dfa==NULL)
-        {
-            printf("Max DFA size %ld exceeded during creation: the DFA was not generated\n",MAX_DFA_SIZE);
-            fprintf(file, "### cannot generate DFA, regex:%s\n\n", nfa->pattern);
-        }
-        else {
-            dfa->minimize();
-            //printf("8-bit DFA size:%d\n", dfa->size());
-
-            Fb_DFA* fdfa = new Fb_DFA(dfa);
-            Fb_DFA* minimum_dfa = fdfa->minimise();
-            delete fdfa;
-            if(minimum_dfa == NULL)
-            {
-                fprintf(file, "*** fdfa NULL, regex:%s\n\n", nfa->pattern);
-                goto CONTINUE;
-            }
-
-            //printf("4-bit DFA size:%d\n", minimum_dfa->size());
-            int cnt_cons2 = minimum_dfa->cons2states();
-            if(minimum_dfa->small_enough()) fb_dfa_lis->push_back(minimum_dfa);
-            else{
-                fprintf(file, "*** fdfa->size:%d, cnt_cons2:%d, regex:%s\n\n", minimum_dfa->size(), cnt_cons2, nfa->pattern);
-            }
-        }
-        CONTINUE:
-        gettimeofday(&end, NULL);
-        int cost_seconds = end.tv_sec - start.tv_sec;
-        if(cost_seconds > 5) fprintf(file, "time-consuming regex:%s\n", nfa->pattern);
-        delete nfa;
-        if(dfa != NULL) delete dfa;
-    }
-    gettimeofday(&gend, NULL);
-    printf("NFAs to DFAs cost time:%d seconds\n", gend.tv_sec - gstart.tv_sec);
-
-    printf("DFAs grouping...\n");
-    gettimeofday(&gstart, NULL);
-    greedy_group(fb_dfa_lis);
-    gettimeofday(&gend, NULL);
-    printf("DFAs grouping cost time:%d seconds\n", gend.tv_sec - gstart.tv_sec);
-
-    //free
-    fclose(file);
-    delete fb_dfa_lis;
-}
-
-/*
- * 将regex list中的规则编译到能放置于CPU中
- * */
-list<DFA*> * compile_back_end(list<char*> *regex_list){
-    struct timeval start, end;
-    FILE* file = fopen("../res/debug_backend.txt", "w");
-    auto *dfa_list = new list<DFA*>();
-    auto *parse=new regex_parser(config.i_mod,config.m_mod);
-
-    printf("REs to NFAs ing...\n");
-    gettimeofday(&start, NULL);
-    list<NFA *>* nfa_list = parse->parse_to_list_from_regexlist(regex_list);
-    gettimeofday(&end, NULL);
-    printf("REs to NFAs cost time:%d seconds\n", end.tv_sec - start.tv_sec);
-    delete parse;
-
-    printf("NFAs to DFAs ing...\n");
-    gettimeofday(&start, NULL);
-    int size = nfa_list->size();
-    for(int i = 0; i < size; i++){
-        struct timeval lstart, lend;
-        gettimeofday(&lstart, NULL);
-
-        if(i % 1 == 0) printf("%d/%d\n", i, size);
-        NFA* nfa = nfa_list->front();
-        printf("now processing re: %s\n", nfa->pattern);
-        nfa_list->pop_front();
-        DFA* dfa=nfa->nfa2dfa();
-        if (dfa==NULL)
-        {
-            fprintf(file, "Max DFA size %ld exceeded during creation: the DFA was not generated\n",MAX_DFA_SIZE);
-            fprintf(file, "explosive re:%s\n", nfa->pattern);
-        }
-        else {
-            dfa->minimize();
-            dfa_list->push_back(dfa);
-        }
-
-        gettimeofday(&lend, NULL);
-        if(lend.tv_sec - lstart.tv_sec > 5){
-            fprintf(file, "time-consuming (%d seconds) R_post:%s\n", lend.tv_sec - lstart.tv_sec, nfa->pattern);
-        }
-        delete nfa;
-        //if(dfa != NULL) delete dfa;
-    }
-    gettimeofday(&end, NULL);
-    printf("NFAs to DFAs cost time:%d seconds\n", end.tv_sec - start.tv_sec);
-
-    fclose(file);
-    return dfa_list;
+    return target_dfas;
 }
 
 void block_re(list<char*> *re_list){
@@ -352,7 +180,6 @@ void block_re(list<char*> *re_list){
     int filter_num = 0;
 
     for(list<char*>::iterator it = re_list->begin(); it != re_list->end(); it++){
-        char* str = *it;
         bool flag_exist = false;
         for(list<char*>::iterator it2 = block_list->begin(); it2 != block_list->end(); it2++){
             char tmp[1000];
@@ -434,7 +261,7 @@ prefix_DFA* compile_prefixDFA(char* R_post){
         }
         NFA* nfa = parser.parse_from_regex(R_pre);
         DFA* dfa = nfa->nfa2dfa();
-        if(dfa == nullptr) fatal("dfa NULL\n");
+        if(dfa == nullptr) fatal((char*)"dfa NULL\n");
         dfa->minimize();
         //add dfa to prefix_dfa
         prefixDfa->add_dfa(dfa);
@@ -446,71 +273,6 @@ prefix_DFA* compile_prefixDFA(char* R_post){
         delete nfa;
     }
 
-    return prefixDfa;
-}
-
-prefix_DFA* compile_single(char* re){
-    Fb_DFA* fbdfa = nullptr;
-    DFA* dfa = nullptr;
-    prefix_DFA* prefixDfa = nullptr;
-    char R_pre[1000], R_post[1000];
-
-    //get R_pre and fbdfa
-    double p_match = decompose(re, R_pre, R_post);
-    if(p_match > T_MATCH && strcmp(re, R_pre) != 0){
-        //todo 尝试提取规则其他部分
-        printf("bad R_pre:%s\n", R_pre);
-        return nullptr;
-    }
-    int threshold = DEAFAULT_THRESHOLD;
-    float ratio = bram_compatible(R_pre, fbdfa, dfa);
-    while(ratio > 0){
-        threshold = (1-ratio) * threshold;
-        p_match = decompose(re, R_pre, R_post, threshold);
-        if(p_match > T_MATCH && strcmp(re, R_pre) != 0){
-            //todo 尝试提取规则其他部分
-            printf("bad R_pre:%s\n", R_pre);
-            return nullptr;
-        }
-        ratio = bram_compatible(R_pre, fbdfa, dfa);
-    }
-    prefixDfa = new prefix_DFA();
-    prefixDfa->add_dfa(dfa);
-    //prefixDfa->add_re(re);
-    prefixDfa->add_re(R_pre);
-    //todo not used temporarily
-    //delete fbdfa;
-    prefixDfa->add_fbdfa(fbdfa);
-    if(R_post[0] != '^') prefixDfa->set_activate_once(); //not '^', must be '.*'
-
-    //get R_post(s) and DFA(s); try decompose R_post further
-    auto parser = regex_parser(config.i_mod, config.m_mod);
-    while(strcmp(R_post, "^") != 0){
-        char re_post[1000];
-        strcpy(re_post, R_post);
-        decompose(re_post, R_pre, R_post, PREFIX_DFA_STATES_THRESHOLD, false, true);
-        if(strcmp(R_pre, "^") == 0 || strlen(R_pre) == 0){
-            printf("bad R_post:%s\n", re_post);
-            //flag_badpost = true;
-            delete prefixDfa;
-            prefixDfa = nullptr;
-            return prefixDfa;
-        }
-        NFA* nfa = parser.parse_from_regex(R_pre);
-        DFA* dfa2 = nfa->nfa2dfa();
-        if(dfa2 == nullptr) fatal("dfa NULL\n");
-        dfa2->minimize();
-        //add dfa to prefix_dfa
-        prefixDfa->add_dfa(dfa2);
-        //prefixDfa->add_re(re_post);
-        prefixDfa->add_re(R_pre);
-        if(R_post[0] != '^') prefixDfa->set_activate_once();
-
-        //free
-        delete nfa;
-    }
-
-    //add fdba and dfa(s) to up-level process
     return prefixDfa;
 }
 
@@ -769,31 +531,6 @@ void debug_prefix_dfa_size(list<prefix_DFA*> *prefix_dfa_list){
     fclose(file);
 }
 
-void test_anchor_explosion(list<char *> *regex_list){
-    list<char*> anchor_rules;
-    int anchor_rule_num = 0;
-    for(auto &it: *regex_list){
-        if(it[0] == '^')
-        {
-            anchor_rule_num++;
-            anchor_rules.push_back(it);
-        }
-    }
-    printf("anchor rules num: %d\n", anchor_rule_num);
-
-    int total_size = 0;
-    list<DFA*> *anchor_dfas = new list<DFA*>();
-    for(auto &it: anchor_rules){
-        prefix_DFA* prefixDfa = compile_prefixDFA(it);
-        anchor_dfas->push_back(prefixDfa->prefix_dfa);
-        total_size += prefixDfa->prefix_dfa->size();
-    }
-    printf("anchor dfas total size: %d\n", total_size);
-
-    DFA* anchor_one_dfa = hm_dfalist2dfa(anchor_dfas);
-    printf("anchor one dfa size: %d\n", anchor_one_dfa->size());
-}
-
 void count_dotstar(list<char *> *regex_list){
     int cnt = 0;
     for(auto& it: *regex_list){
@@ -802,10 +539,44 @@ void count_dotstar(list<char *> *regex_list){
     printf("# regexes containing dot_star:%d\n", cnt);
 }
 
+
+/*generate a file to write to FPGA BRAMs*/
+void generate_fpga_stt(Fb_DFA** fb_dfas, int fbdfa_num){
+    FILE* f_stt_dump = fopen("./fpga_stt.bin", "wb");
+    //mappint table, record the mapping relation between prefix_dfa and postfix_dfa
+    /*auto** mapping_table = (uint16_t**) malloc(sizeof(uint16_t*) * fbdfa_num);
+    for(int i=0; i<fbdfa_num; i++){
+        mapping_table[i] = (uint16_t *) malloc(sizeof(uint16_t) * MAX_STATES_NUMBER);
+    }*/
+    auto mapping_table = new map<uint32_t, list<uint16_t>*>();
+
+    for(uint16_t i=0; i<fbdfa_num; i++){
+        //printf("generating %d/%d BRAM mem...\n", i, fbdfa_num);
+        void* mem_stt = fb_dfas[i]->to_BRAM(i, mapping_table);
+        fwrite(mem_stt, 20480/8, 1, f_stt_dump);
+    }
+    fclose(f_stt_dump);
+
+    /*dump mapping table*/
+    FILE* f_mapping = fopen("./mapping.txt", "w");
+    for(auto it: *mapping_table){
+        uint32_t key = it.first;
+        list<uint16_t>* lis = it.second;
+        fprintf(f_mapping, "%u", key);
+        for(auto it2: *lis){
+            fprintf(f_mapping," %u", it2);
+        }
+        fprintf(f_mapping, "\n");
+    }
+    fclose(f_mapping);
+    delete mapping_table;
+
+    printf("finsished generating fpga_stt.\n");
+}
+
 /*
  *  MAIN - entry point
  */
-#if 0
 int main(int argc, char **argv){
     struct timeval start, end;
 
@@ -818,72 +589,22 @@ int main(int argc, char **argv){
     if (DEBUG) VERBOSE=1;
 
     //check that it is possible to open the files
-    if (config.regex_file!=NULL) check_file(config.regex_file,"r");
-    if (config.trace_file!=NULL) check_file(config.trace_file,"r");
+    if (config.regex_file!= nullptr) check_file(config.regex_file,(char*)"r");
+    if (config.trace_file!= nullptr) check_file(config.trace_file,(char*)"r");
 
     // check that either a regex file or a DFA import file are given as input
-    if (config.regex_file==NULL){
-        fatal("No data file - please use either a regex file\n");
+    if (config.regex_file== nullptr){
+        fatal((char*)"No data file - please use either a regex file\n");
     }
 
     list<char *> *regex_list = read_regexset(config.regex_file);
     //过滤一些暂不支持，或者耗时/影响性能的规则
     block_re(regex_list);
-    //R_pres + R_smalls
-    auto *regex_s1 = new list<char *>();
-    //R_posts
-    auto *regex_s2 = new list<char *>();
-    decompose_set(regex_list, regex_s1, regex_s2);
-
-#if 1
-    gettimeofday(&start, NULL);
-    compile_front_end(regex_s1);
-    gettimeofday(&end, NULL);
-    printf("compile_front cost time:%d seconds\n", end.tv_sec - start.tv_sec);
-    gettimeofday(&start, NULL);
-    compile_back_end(regex_s2);
-    gettimeofday(&end, NULL);
-    printf("compile_back_end cost time:%d seconds\n", end.tv_sec - start.tv_sec);
-#endif
-    return 0;
-}
-#else
-int main(int argc, char **argv){
-    struct timeval start, end;
-
-    //read configuration
-    init_conf();
-    while(!parse_arguments(argc,argv)) usage();
-    print_conf();
-    VERBOSE=config.verbose;
-    DEBUG=config.debug;
-    if (DEBUG) VERBOSE=1;
-
-    //check that it is possible to open the files
-    if (config.regex_file!=NULL) check_file(config.regex_file,"r");
-    if (config.trace_file!=NULL) check_file(config.trace_file,"r");
-
-    // check that either a regex file or a DFA import file are given as input
-    if (config.regex_file==NULL){
-        fatal("No data file - please use either a regex file\n");
-    }
-
-    list<char *> *regex_list = read_regexset(config.regex_file);
-    //过滤一些暂不支持，或者耗时/影响性能的规则
-    block_re(regex_list);
-
-    //test anchor rules whether introduce state explosion
-    //test_anchor_explosion(regex_list);
-    //return 0;
-
-    //count the regexes with ".*"-like part
-    //count_dotstar(regex_list);
-    //return 0;
 
     gettimeofday(&start, nullptr);
     list<prefix_DFA*> *prefix_dfa_list = compile(regex_list);
     gettimeofday(&end, nullptr);
-    printf("compile cost time(generating dfa):%llf seconds\n", (end.tv_sec - start.tv_sec) + 0.000001 * (end.tv_usec - start.tv_usec));
+    printf("compile cost time(generating dfa):%f seconds\n", (end.tv_sec - start.tv_sec) + 0.000001 * (end.tv_usec - start.tv_usec));
 
 #if 1
     debug_prefix_dfa_size(prefix_dfa_list);
@@ -897,32 +618,40 @@ int main(int argc, char **argv){
     int fstates_inBRAM = 0;
     int dfastates_inBRAM = 0;
     list<Fb_DFA*> *fbDFA_lis = new list<Fb_DFA*>();
+    vector<prefix_DFA*> *vec_prefixDFA = new vector<prefix_DFA*>(); //used for matching
+    uint16_t ind_prefixdfa = 0;
     for(auto &it: *prefix_dfa_list){
         //prefix regex is exact string, put in single external SRAM instead of internal BRAM
         if(is_exactString(it->re)){
             exact_string_prefix_num++;
-            //control is put exact string in BRAM
+            //control if put exact string in BRAM
             //continue;
         }
         fstates_inBRAM += it->fbDfa->size();
         dfastates_inBRAM += it->prefix_dfa->size();
         fbDFA_lis->push_back(it->fbDfa);
+        it->fbDfa->ind_prefixdfa_single = ind_prefixdfa++;//实际匹配运行时使用
+        it->fbDfa = nullptr; //在greedy_group()里释放，防止重释放
+
+        vec_prefixDFA->push_back(it);
     }
     printf("exact string prefix num:%d\n", exact_string_prefix_num);
     printf("In BRAM, dfa states num: %d\n",dfastates_inBRAM);
     printf("In BRAM, four-bit states num: %d\n",fstates_inBRAM);
     gettimeofday(&start, nullptr);
-    greedy_group(fbDFA_lis);
+
+    int fbdfa_num = 0;
+    Fb_DFA** fbdfas = greedy_group(fbDFA_lis, fbdfa_num);
     delete fbDFA_lis;
     gettimeofday(&end, nullptr);
     printf("grouping fb_dfa cost time:%llf seconds\n", (end.tv_sec - start.tv_sec) + 0.000001 * (end.tv_usec - start.tv_usec));
-
+    /*generate STT for fbdfas in FPGA*/
+    generate_fpga_stt(fbdfas, fbdfa_num);
 #endif
 
     //simulate to examine CPU burden
     simulate(prefix_dfa_list);
     return 0;
 }
-#endif
 
 //this is fgpa_run branch

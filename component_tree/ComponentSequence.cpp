@@ -162,7 +162,6 @@ void ComponentSequence::extract(char *R_pre, char *R_mid, char *R_post, int thre
             if(cut_num == -1) strcat(cur_s, it->get_re_part());
             else if(cut_num == 0) strcat(R_post, it->get_re_part());
             else{ //cut from middle
-                Component* sub = ((ComponentRepeat *)it)->sub_comp;
                 int tem_min = ((ComponentRepeat *)it)->m_min;
                 int tem_max = ((ComponentRepeat *)it)->m_max;
                 ((ComponentRepeat *)it)->m_min = cut_num;

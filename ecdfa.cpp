@@ -299,12 +299,12 @@ unsigned int EgCmpDfa::getMemSize(){
 	// printf("%d %d\n", sizeof(EgCmpDfaEdage), sizeof(state_t));
 	for(state_t s=0;s<this->size;++s){
 		EgCmpDfaEdage * data = NULL;
-		EgCmpDfaRleRangeItem* data1 = NULL;
+		//EgCmpDfaRleRangeItem* data1 = NULL;
 		EgCmpDfaHasBitEdage * data2 = NULL;
 		EgCmpDfaHasBitWithRleEdage * data3 = NULL;
-		EgCmpDfaSampleRange* data4 = NULL;
+		//EgCmpDfaSampleRange* data4 = NULL;
 		EgCmpDfaRleRange* data5 = NULL;
-		EgCmpDfaBitmapRange* data6 = NULL;
+		//EgCmpDfaBitmapRange* data6 = NULL;
 		switch(this->types[s]){
 			case 1:
 			count1++;
@@ -345,16 +345,16 @@ unsigned int EgCmpDfa::getMemSize(){
 		}
 	}
 
-	printf("single:%d, bitmap+range:%d, bitmap+rle:%d, range:%d, rle:%d, bitmap:%d\n", count1, count2, count3, count4, count5, count6);
+	printf("single:%llu, bitmap+range:%llu, bitmap+rle:%llu, range:%llu, rle:%llu, bitmap:%llu\n", count1, count2, count3, count4, count5, count6);
 	return sum;
 }
 
 state_t EgCmpDfa::getNext(state_t current, unsigned char input) {
- 	EgCmpDfaRleRangeItem* data1 = NULL;
- 	EgCmpDfaHasBitEdage * data23 = NULL;
- 	EgCmpDfaSampleRange* data4 = NULL;
- 	EgCmpDfaRleRange* data5 = NULL;
- 	EgCmpDfaBitmapRange* data6 = NULL;
+ 	EgCmpDfaRleRangeItem* data1 = nullptr;
+ 	EgCmpDfaHasBitEdage * data23 = nullptr;
+ 	EgCmpDfaSampleRange* data4 = nullptr;
+ 	EgCmpDfaRleRange* data5 = nullptr;
+ 	EgCmpDfaBitmapRange* data6 = nullptr;
  	unsigned int i = 0;
  	switch(this->types[current]) {
  		case 1:

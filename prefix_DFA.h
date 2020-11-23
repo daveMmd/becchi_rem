@@ -4,7 +4,6 @@
 
 #ifndef BECCHI_REGEX_PREFIX_DFA_H
 #define BECCHI_REGEX_PREFIX_DFA_H
-
 #include "Fb_DFA.h"
 
 /*
@@ -13,7 +12,9 @@
 class prefix_DFA{
 public:
     char *complete_re; //for debug : correspond to original rule
+    //string complete_re;
     char *re; //debug: correspond to the re part compiled in dfa
+    //string re;
     Fb_DFA* fbDfa;
     DFA* prefix_dfa;
     prefix_DFA* next_node;

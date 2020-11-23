@@ -17,8 +17,10 @@ void ComponentClass::insert(int start, int end) {
 }
 
 int ComponentClass::head() {
-    for(int c = 0; c < 256; c++)
+    for(int c = 0; c < 256; c++){
         if(charReach[c]) return c;
+    }
+    return 0;//impossible
 }
 
 int ComponentClass::num_concat() {

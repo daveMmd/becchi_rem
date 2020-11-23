@@ -51,3 +51,9 @@ add_subdirectory(component_tree)
 #final for fpga
 add_executable(bram_fpga2 dave_subset.cpp ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} main_fpga_2.cpp ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp hierarMerging.cpp dave_nfa.cpp hfadump.cpp set.cpp Fb_DFA.cpp Fb_DFA.h Fb_NFA.cpp Fb_NFA.h)
 target_link_libraries(bram_fpga2 parse)
+
+#使用boost 库
+#include_directories(/usr/local/Cellar/boost/1.70.0/include)
+#link_directories(/usr/local/Cellar/boost/1.70.0/lib/)
+
+add_executable(runtime_fpga runtime_fpga.cpp)

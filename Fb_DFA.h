@@ -8,6 +8,7 @@
 #define MAX_STATES_NUMBER 212
 
 #include "dfa.h"
+#include <unordered_map>
 //#include "Fb_NFA.h"
 
 class Fb_DFA {
@@ -22,6 +23,9 @@ public:
     state_t **state_table;
     int _size;
     int *is_accept;
+
+    uint16_t ind_prefixdfa_single; //临时记录单条规则编译时对应的prefixDFA
+    list<uint16_t >** accept_to_prefix_dfa; //记录匹配时，对应激活哪一个prefix_DFA(单个状态可能对应多个prefixDFA)
 
     Fb_DFA();
     explicit Fb_DFA(DFA* dfa);
@@ -51,6 +55,10 @@ public:
     bool small_enough();
 
     float get_ratio();
+
+    void* to_BRAM(uint16_t dfaid, map<uint32_t, list<uint16_t>*> *mapping_table);/*gen STT bit stream compatible for FPGA*/
+
+    bool is_bigstate(state_t state);
 };
 
 

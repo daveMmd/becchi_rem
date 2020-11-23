@@ -147,11 +147,11 @@ state_t DFA::add_state(){
 	state_t state=_size++;
     if(_size % 100000==0)fprintf(stderr, "dfa now states:%d\n",_size);
     if(DEBUG && state%1000==0 && state!=0){
-	   printf("... state = %ld\n",state);
+	   printf("... state = %u\n",state);
 	   fflush(stdout);
     }
 	if (state==NO_STATE)
-		fatal("DFA:: add_state(): too many states!");
+		fatal((char*)"DFA:: add_state(): too many states!");
 	if (state >= entry_allocated){
     //if (state >= entry_allocated-5){
 		entry_allocated += MAX_DFA_SIZE_INCREMENT;
@@ -174,7 +174,8 @@ state_t DFA::add_state(){
     /**/
     if(flag_mask_table){
         mask_table[state] = allocate_byte_array(CSIZE);
-        memset(mask_table[state], 0, sizeof(mask_table[state]));
+        //memset(mask_table[state], 0, sizeof(mask_table[state]));
+        memset(mask_table[state], 0, CSIZE);
     }
 
 	return state;
@@ -182,13 +183,13 @@ state_t DFA::add_state(){
 
 
 void DFA::dump(FILE *log){
-	fprintf(log,"Dumping DFA: %ld states\n",_size);
+	fprintf(log,"Dumping DFA: %u states\n",_size);
     for(state_t i=0;i<_size;i++){
     	fprintf(log,"> state # %d",i);
     	if (!accepted_rules[i]->empty()) {
     		fprintf(log," accepts ");
     		linked_set *s=accepted_rules[i];
-    		while (s!=NULL){ fprintf(log,"[%ld]",s->value());s=s->succ();}
+    		while (s!= nullptr){ fprintf(log,"[%u]",s->value());s=s->succ();}
     	}
     	fprintf(log,"\n");
     	for(int j=0;j<CSIZE;j++){
@@ -217,7 +218,7 @@ int DFA::match(char * str){
   int i = 0;
   state_t current = 0;
   while(str[i]!=0){
-    current = state_table[current][str[i]];
+    current = state_table[current][(int)str[i]];
     if(!accepted_rules[current]->empty()){
       return 1;
     }
@@ -233,7 +234,7 @@ int DFA::match(char * str){
 void DFA::minimize() {
 
     //fprintf(stderr, "loc2");
-	if (VERBOSE) fprintf(stdout,"DFA:: minimize: before minimization states = %ld\n",_size);
+	if (VERBOSE) fprintf(stdout,"DFA:: minimize: before minimization states = %u\n",_size);
 	
 	unsigned long i;
     // the algorithm needs the DFA to be total, so we add an error state 0,
@@ -679,7 +680,7 @@ void DFA::minimize() {
     entry_allocated=_size;
 
     //fprintf(stderr, "loc10");
-	if (VERBOSE) fprintf(stdout,"DFA:: minimize: after minimization states = %ld\n",_size);
+	if (VERBOSE) fprintf(stdout,"DFA:: minimize: after minimization states = %u\n",_size);
    
  }
 
@@ -688,25 +689,25 @@ void DFA::to_dot(FILE *file, const char *title){
 	fprintf(file, "digraph \"%s\" {\n", title);
 	for (state_t s=0;s<_size;s++){
 		if (accepted_rules[s]->empty()){ 
-			fprintf(file, " %ld [shape=circle,label=\"%ld",s,s);
-			fprintf(file,"-%ld\"];\n",depth[s]);
+			fprintf(file, " %u [shape=circle,label=\"%u",s,s);
+			fprintf(file,"-%u\"];\n",depth[s]);
 			//fprintf(file, " %ld [shape=circle];\n", s);
 		}else{ 
-			fprintf(file, " %ld [shape=doublecircle,label=\"%ld",s,s);
-			fprintf(file, "-%ld/",depth[s]);
+			fprintf(file, " %u [shape=doublecircle,label=\"%u",s,s);
+			fprintf(file, "-%u/",depth[s]);
 			linked_set *ls=	accepted_rules[s];
-			while(ls!=NULL){
-				if(ls->succ()==NULL)
-					fprintf(file,"%ld",ls->value());
+			while(ls!= nullptr){
+				if(ls->succ()==nullptr)
+					fprintf(file,"%u",ls->value());
 				else
-					fprintf(file,"%ld,",ls->value());
+					fprintf(file,"%u,",ls->value());
 				ls=ls->succ();
 			}
 			fprintf(file,"\"];\n");
 		}
 	}
     int *mark=allocate_int_array(CSIZE);
-	char *label=NULL;
+	char *label= nullptr;
 	char *temp=(char *)malloc(100);
 	state_t target=NO_STATE;
     for (state_t s=0;s<_size;s++){
@@ -750,13 +751,13 @@ void DFA::to_dot(FILE *file, const char *title){
 					}	
 				}
 			}
-			if (label!=NULL) {
-				fprintf(file, "%ld -> %ld [label=\"%s\"];\n", s,target,label);	
+			if (label!= nullptr) {
+				fprintf(file, "%u -> %u [label=\"%s\"];\n", s,target,label);
 				free(label); 
-				label=NULL;
+				label= nullptr;
 			}
 		}
-		if (default_tx!=NULL) fprintf(file, "%ld -> %ld [color=\"limegreen\"];\n", s,default_tx[s]);
+		if (default_tx!=NULL) fprintf(file, "%u -> %u [color=\"limegreen\"];\n", s,default_tx[s]);
 	}
     free(temp);
 	free(mark);
@@ -771,17 +772,17 @@ void DFA::put(FILE *file, char *comment){
 	if (comment!=NULL) fprintf(file,"# %s\n",comment);
 	else fprintf(file,"# DFA dump \n");
 	//number of states
-	fprintf(file, "%ld\n", _size);
+	fprintf(file, "%u\n", _size);
 	if (_size==0) return;
 	//for each state, failure pointer, labeled transitions char-state, accepting states)
 	for (state_t s=0;s<_size;s++){
 		fprintf(file, "( ");
-		fprintf(file,"%ld",default_tx[s]);
+		fprintf(file,"%u",default_tx[s]);
 		fprintf(file, " ( ");
-		FOREACH_TXLIST(labeled_tx[s],it) fprintf(file,"%d %ld ",(*it).first,(*it).second);
+		FOREACH_TXLIST(labeled_tx[s],it) fprintf(file,"%d %u ",(*it).first,(*it).second);
 		fprintf(file, ")");	
 		linked_set *ls=accepted_rules[s];
-		while(ls!=NULL && !ls->empty()){fprintf(file," %ld",ls->value());ls=ls->succ();}
+		while(ls!=NULL && !ls->empty()){fprintf(file," %u",ls->value());ls=ls->succ();}
 		fprintf(file, " )\n");	
 	}
 }
@@ -813,7 +814,7 @@ void DFA::get(FILE *file){
 	/* number of states */
 	int res=fscanf(file,"%d\n",&_size);
 	if (res==EOF || res<=0) {
-		fatal("DFA:: get: _size not read");
+		fatal((char*)"DFA:: get: _size not read");
 	}
 	//printf("%ld states\n",_size);
 	if(_size==0) return;
@@ -832,7 +833,7 @@ void DFA::get(FILE *file){
 		state_table[s]=allocate_state_array(CSIZE);
 		accepted_rules[s]=new linked_set();
 		res=fscanf(file,"( %d ( ",&(default_tx[s]));
-		if (res==EOF || res<=0) fatal("DFA:: get: error in reading failure pointer");
+		if (res==EOF || res<=0) fatal((char*)"DFA:: get: error in reading failure pointer");
 		posn=ftell(file);
 		res=fscanf(file,"%d %d ",&c,&ns);
 		while(res!=EOF && res>0){
@@ -843,8 +844,8 @@ void DFA::get(FILE *file){
 		}
 		fseek(file,posn,SEEK_SET);
 		posn=ftell(file);
-		res = getc(file); if (res!=')') fatal("DFA:: get: invalid format");
-		res = getc(file); if (res!=' ') fatal("DFA:: get: invalid format");
+		res = getc(file); if (res!=')') fatal((char*)"DFA:: get: invalid format");
+		res = getc(file); if (res!=' ') fatal((char*)"DFA:: get: invalid format");
 		posn=ftell(file);
 		res=fscanf(file,"%d ",&c);
 		while(res!=EOF && res>0){
@@ -855,8 +856,8 @@ void DFA::get(FILE *file){
 			res=fscanf(file,"%d ",&c);
 		}
 		fseek(file,posn,SEEK_SET);
-		res = getc(file); if (res!=')') fatal("DFA:: get: invalid format");
-		res = getc(file); if (res!='\n') fatal("DFA:: get: invalid format");
+		res = getc(file); if (res!=')') fatal((char*)"DFA:: get: invalid format");
+		res = getc(file); if (res!='\n') fatal((char*)"DFA:: get: invalid format");
 	}	
 	//reconstructing state table
 	for (state_t s=0;s<_size;s++)
@@ -919,7 +920,7 @@ void DFA::analyze_classes(short *classes, short num_classes){
 				}
 			}
 		}
-		printf("state %ld: entry_states=%ld, entry_classes=%ld\n",s,entry_state[s],entry_class[s]);
+		printf("state %u: entry_states=%u, entry_classes=%u\n",s,entry_state[s],entry_class[s]);
 		if (entry_class[s]>max_eclass) max_eclass=entry_class[s];
 		if (entry_state[s]>max_estate) max_estate=entry_state[s];
 	}
@@ -930,7 +931,7 @@ void DFA::analyze_classes(short *classes, short num_classes){
 		for (state_t s=0;s<_size;s++){
 			if(entry_state[s]==i) num_states++;
 		}
-		if (num_states!=0) printf("entry states:%ld - states=%ld %f%%\n",i,num_states,(float)num_states*100/_size);
+		if (num_states!=0) printf("entry states:%d - states=%d %f%%\n",i,num_states,(float)num_states*100/_size);
 	}
 	printf("\n");
 	for (int i=max_eclass;i>0;i--){
@@ -938,7 +939,7 @@ void DFA::analyze_classes(short *classes, short num_classes){
 		for (state_t s=0;s<_size;s++){
 			if(entry_class[s]==i) num_states++;
 		}
-		if (num_states!=0) printf("entry classes:%ld - states=%ld %f%%\n",i,num_states,(float)num_states*100/_size);
+		if (num_states!=0) printf("entry classes:%d - states=%d %f%%\n",i,num_states,(float)num_states*100/_size);
 	}
 	free(class_covered);
 	free(entry_state);
@@ -1011,10 +1012,10 @@ int DFA::traversals_per_lookup(state_t s,symbol_t c){
 }
 
 void DFA::crosscheck_default_tx(){
-	if (labeled_tx==NULL) fatal("default/labeled transitions not yet computed");
+	if (labeled_tx==NULL) fatal((char*)"default/labeled transitions not yet computed");
 	for (state_t s=0;s<_size;s++)
 		for (int c=0;c<CSIZE;c++)
-			if(state_table[s][c]!=lookup(s,c)) printf("error:: (%ld,%d)\n",s,c);
+			if(state_table[s][c]!=lookup(s,c)) printf("error:: (%u,%d)\n",s,c);
 	printf("crosscheck ok\n");		
 }
 
@@ -1034,7 +1035,7 @@ void DFA::analyze_default_tx(short *classes, short num_classes, int offset,FILE 
 		dt_d[depth[default_tx[s]]]++;
 	}
 	//for (int d=0;d<=max_d;d++) printf("depth %ld - states=%ld;%f %%, targets=%ld;%f %%, dt=%ld;%f %%\n",d,state_d[d],(float)100*state_d[d]/_size,target_d[d],(float)100*target_d[d]/(_size*CSIZE),dt_d[d],(float)100*dt_d[d]/_size);
-	for (int d=0;d<=max_d;d++) printf("depth %ld - states=%ld, targets=%ld, dt=%ld\n",d,state_d[d],target_d[d],dt_d[d]);
+	for (int d=0;d<=max_d;d++) printf("depth %u - states=%u, targets=%u, dt=%u\n",d,state_d[d],target_d[d],dt_d[d]);
 	delete [] state_d; 
 	delete [] target_d;
 	delete [] dt_d;
@@ -1044,7 +1045,7 @@ void DFA::analyze_default_tx(short *classes, short num_classes, int offset,FILE 
 	linked_set *dt=new linked_set();
 	for(state_t s=0;s<_size;s++)
 		dt->insert(default_tx[s]);
-	printf("- number of distinct default_tx targets: %ld\n",dt->size());	
+	printf("- number of distinct default_tx targets: %u\n",dt->size());
 	delete dt;
 	//path length
 	printf("- failure_pointer path length analysis...\n");
@@ -1068,9 +1069,9 @@ void DFA::analyze_default_tx(short *classes, short num_classes, int offset,FILE 
 		tot_length+=length*states;
 		if (length>max_l) max_l=length;
 		if (length<min_l) min_l=length;
-		printf("length=%ld, path=%ld\n",length,states);
+		printf("length=%d, path=%d\n",length,states);
 	}
-	printf("path length: min=%ld, max=%ld, average=%f\n",min_l,max_l,(float)tot_length/(_size*CSIZE));
+	printf("path length: min=%u, max=%u, average=%f\n",min_l,max_l,(float)tot_length/(_size*CSIZE));
 	delete heap;
 	
 	printf("\n> Analysis of transitions...\n");
@@ -1088,7 +1089,7 @@ void DFA::analyze_default_tx(short *classes, short num_classes, int offset,FILE 
 		int non_null=heap->deletemin();
 		int states =heap->key(non_null);
 		reduced+=non_null*states;
-		printf("transitions=%ld, states=%ld\n",non_null,states);
+		printf("transitions=%u, states=%u\n",non_null,states);
 	}
 	unsigned long distinct=0;
 	linked_set *set=new linked_set();
@@ -1100,10 +1101,10 @@ void DFA::analyze_default_tx(short *classes, short num_classes, int offset,FILE 
 	}
 	delete set;
 	delete heap;
-	if (offset==-1) fprintf(file,"%d %d %ld %ld %f ",_size, num_classes, _size*CSIZE, distinct,
+	if (offset==-1) fprintf(file,"%d %d %u %ld %f ",_size, num_classes, _size*CSIZE, distinct,
 						        (float)100-distinct*100/(float)(_size*CSIZE));
 	fprintf(file,"%f %d %ld %f ",(float)tot_length/(_size*CSIZE),max_l,reduced,(float)100-reduced*100/(float)(_size*CSIZE));   	
-	printf("transitions: total=%ld, distinct=%ld, reduced=%ld\n",_size*CSIZE,distinct,reduced);
+	printf("transitions: total=%u, distinct=%ld, reduced=%ld\n",_size*CSIZE,distinct,reduced);
 	printf("percentage: distinct=%f %%, reduced=%f %%\n",(float)100-distinct*100/(float)(_size*CSIZE),(float)100-reduced*100/(float)(_size*CSIZE));
 	
 	printf("-class based ...\n");
@@ -1129,7 +1130,7 @@ void DFA::analyze_default_tx(short *classes, short num_classes, int offset,FILE 
 		int class_tr=heap->deletemin();
 		int states =heap->key(class_tr);
 		tot_class_tr+=(class_tr*states);
-		printf("transitions=%ld, states=%ld\n",class_tr,states);
+		printf("transitions=%d, states=%d\n",class_tr,states);
 	}
 	printf("class transitions %ld, % reductions: %f %%\n ", tot_class_tr, (float)100-tot_class_tr*100/(float)(_size*CSIZE));
 	fprintf(file,"%ld %f ",tot_class_tr, (float)100-tot_class_tr*100/(float)(_size*CSIZE));
@@ -1186,7 +1187,7 @@ void DFA::fast_compression_algorithm(int k,int bound){
 	}
 	delete [] dt_length;
 	gettimeofday(&end,NULL);
-	if (VERBOSE) printf("Running_time=%ld sec. %ld msec.\n",end.tv_sec-start.tv_sec,(end.tv_usec-start.tv_usec)/1000);
+	if (VERBOSE) printf("Running_time=%ld sec. %d msec.\n",end.tv_sec-start.tv_sec,(end.tv_usec-start.tv_usec)/1000);
 }
 
 inline int top(int x, int y){
@@ -1563,6 +1564,8 @@ unsigned optimization_phase(wgraph *G, wgraph *T, partitionX *P, int *distance, 
 	delete heap;
 	delete [] bound;
 	delete [] edges;
+
+	return 0;//add to no warning
 }
 
 unsigned DFA::CD2FA(){

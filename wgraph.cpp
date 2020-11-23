@@ -75,7 +75,6 @@ char wgraph::cflush(char c, FILE *f) {
 
 bool wgraph::getedge(edge e, FILE* f) {
 // Read one edge from *f into edges[e]. Return true on success, else false.
-	char c;
 	if (cflush('(',f) == EOF) return false;
 	
 	fscanf(f,"%d",&edges[e].l);
@@ -90,7 +89,7 @@ bool wgraph::getedge(edge e, FILE* f) {
 
 edge wgraph::join(vertex u, vertex v, weight W) {
 // Join u and v with edge of given weight. Return edge number.
-	if (++m > M) fatal("wgraph: too many edges");
+	if (++m > M) fatal((char*)"wgraph: too many edges");
 	edges[m].l = u; edges[m].r = v; edges[m].wt = W;
 	edges[m].lnext = firstedge[u]; firstedge[u] = m;
 	edges[m].rnext = firstedge[v]; firstedge[v] = m;
@@ -110,7 +109,7 @@ void wgraph::bldadj() {
 
 bool wgraph::get(FILE* f) {
 // Get graph from f.
-	if (fscanf(f,"%d%d",&N,&M) != 2) return false;
+	if (fscanf(f,"%u%lu",&N,&M) != 2) return false;
 	delete [] firstedge; delete [] edges;
 	firstedge = new edge[N+1]; edges = new wgedge[M+2];
 	n = N; m = 1;
@@ -118,9 +117,9 @@ bool wgraph::get(FILE* f) {
 		// each edge appears twice in input
 		if (!getedge(m,f)) break;
 		if (edges[m].l > n || edges[m].r > n)
-			fatal("wgraph::get: out of range vertex number");
+			fatal((char*)"wgraph::get: out of range vertex number");
 		if (edges[m].l < edges[m].r) {
-			if (m > M) fatal("wgraph::get: edge mismatch");
+			if (m > M) fatal((char*)"wgraph::get: edge mismatch");
 			m++;
 		}
 	}
@@ -131,11 +130,11 @@ bool wgraph::get(FILE* f) {
 void wgraph::put(FILE* f) {
 // Put graph out on f.
 	int i; vertex u; edge e;
-	fprintf(f,"%d %d\n",n,m);
+	fprintf(f,"%d %lu\n",n,m);
 	for (u = 0; u < n; u++) {
 		i = 0;
 		for (e = first(u); e != Null; e = next(u,e)) {
-			fprintf(f,"%ld=(%2d,%2d,%2d)  ",e, u,mate(u,e),w(e));
+			fprintf(f,"%u=(%2d,%2d,%2d)  ",e, u,mate(u,e),w(e));
             if ((++i)%5 == 0) putc('\n',f);
         }
 	}
@@ -186,10 +185,10 @@ void wgraph::to_dot(char *filename){
 	FILE *file=fopen(filename,"w");
 	fprintf(file, "digraph \"%s\" {\n", filename);
 	for (vertex u = 0; u < n; u++) {
-    	fprintf(file, " %ld [shape=circle,label=\"%ld\"];\n",u,u);
+    	fprintf(file, " %u [shape=circle,label=\"%u\"];\n",u,u);
     }
     for (edge e = 1; e <=m; e++) {
-        fprintf(file, "%ld -> %ld [shape=none,label=\"%ld\"];\n", left(e),right(e),w(e));                       
+        fprintf(file, "%u -> %u [shape=none,label=\"%u\"];\n", left(e),right(e),w(e));
     }
     fprintf(file, "}\n");
     fclose(file);

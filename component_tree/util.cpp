@@ -7,11 +7,11 @@
 
 std::list<char *>* read_regexset(char* fname){
     FILE* file = fopen(fname, "r");
-    if(file == NULL) fatal("read_regexset: file NULL.");
+    if(file == nullptr) fatal((char*)"read_regexset: file NULL.");
     auto regex_list = new std::list<char *>();
     char tmp[1000];
-    while(1){
-        if(fgets(tmp, 1000, file)==NULL) break;
+    while(true){
+        if(fgets(tmp, 1000, file)== nullptr) break;
         if(tmp[0]=='#') continue;
         int len=strlen(tmp);
         if(len == 1 && tmp[len-1] == '\n') continue; //jump empty line

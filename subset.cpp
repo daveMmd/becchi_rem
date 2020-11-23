@@ -91,9 +91,10 @@ bool subset::lookup(set <state_t> *nfaid_set, Fb_DFA *dfa, state_t *dfaid){
         }
         return next_v->lookup(nfaid_set,dfa,dfaid);
     }else{
-        fatal("subset::lookup: condition should never occur");
+        fatal((char*)"subset::lookup: condition should never occur");
     }
 
+    return false; //no warning
 }
 
 //version used in subset construction
@@ -130,14 +131,16 @@ bool subset::lookup(set <state_t> *nfaid_set, DFA *dfa, state_t *dfaid){
 		}
 		return next_v->lookup(nfaid_set,dfa,dfaid);
 	}else{
-		fatal("subset::lookup: condition should never occur");
+		fatal((char*)"subset::lookup: condition should never occur");
 	}
+
+	return false; //no warning
 }
 
 
 //version used in NFA reduction
 bool subset::lookup(set <state_t> *nfaid_set, NFA **nfa){
-	if (nfaid_set->empty()) fatal("subset:: NFA lookup with empty set");
+	if (nfaid_set->empty()) fatal((char*)"subset:: NFA lookup with empty set");
 	state_t id = *(nfaid_set->begin());
 	if (id==nfa_id){
 		nfaid_set->erase(nfaid_set->begin());
@@ -169,8 +172,10 @@ bool subset::lookup(set <state_t> *nfaid_set, NFA **nfa){
 		}
 		return next_v->lookup(nfaid_set,nfa);
 	}else{
-		fatal("subset::lookup: condition should never occur");
+		fatal((char*)"subset::lookup: condition should never occur");
 	}
+
+	return false; //no warning
 }
 
 void subset::analyze(dheap *heap,int size){

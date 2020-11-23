@@ -15,9 +15,9 @@ ComponentClass* parse_escape(int &ptr, char* re){
         case 'x':
         case 'X':
             if(ptr>strlen(re)-3)
-                fatal("parse_escape: invalid hex escape sequence.");
+                fatal((char*)"parse_escape: invalid hex escape sequence.");
             else if (!is_hex_digit(re[ptr+1]) || !is_hex_digit(re[ptr+2]))
-                fatal("regex_parser::process_escape: invalid hex escape sequence.");
+                fatal((char*)"regex_parser::process_escape: invalid hex escape sequence.");
             else{
                 char tmp[5];
                 tmp[0]='0'; tmp[1]=re[ptr]; tmp[2]=re[ptr+1]; tmp[3]=re[ptr+2]; tmp[4]='\0';
@@ -82,7 +82,7 @@ ComponentClass* parse_range(int &ptr, char *re){
     int ptr_pre = ptr; //range start '['
     ptr++;
     if (re[ptr]==CLOSE_SBRACKET)
-        fatal("parse_range: empty range.");
+        fatal((char*)"parse_range: empty range.");
     bool negate=false;
     int from=CSIZE+1;
     //int_set *range=new int_set(CSIZE);
@@ -107,13 +107,13 @@ ComponentClass* parse_range(int &ptr, char *re){
             ptr++;
         }else{
             if (from>to)
-                fatal("parse_range: invalid range.");
+                fatal((char*)"parse_range: invalid range.");
             range->insert(from, to);
             from=CSIZE+1;
         }
     }
     if (re[ptr]!=CLOSE_SBRACKET)
-        fatal("parse_range: range not closed.");
+        fatal((char*)"parse_range: range not closed.");
     ptr++;
     memcpy(range->re_part, re + ptr_pre, ptr - ptr_pre);
     range->re_part[ptr - ptr_pre] = '\0';
@@ -128,18 +128,18 @@ void process_quantifier(const char *re, int &ptr, int *lb_p, int *ub_p){
     int lb=0;
     int ub=_INFINITY;
     int res=sscanf(re+ptr,"%d",&lb);
-    if (res!=1) fatal("process_quantifier: wrong quantified expression.");
+    if (res!=1) fatal((char*)"process_quantifier: wrong quantified expression.");
     while(ptr!=strlen(re) && re[ptr]!=COMMA && re[ptr]!=CLOSE_QBRACKET)
         ptr++;
     if (ptr==strlen(re) || (re[ptr]==COMMA && ptr==strlen(re)-1))
-        fatal("regex_parser:: process_quantifier: wrong quantified expression.");
+        fatal((char*)"regex_parser:: process_quantifier: wrong quantified expression.");
     if(re[ptr]==CLOSE_QBRACKET){
         ub=lb;
     }else{
         ptr++;
         if(re[ptr]!=CLOSE_QBRACKET){
             res=sscanf(re+ptr,"%d}",&ub);
-            if (res!=1) fatal("regex_parser:: process_quantifier: wrong quantified expression.");
+            if (res!=1) fatal((char*)"regex_parser:: process_quantifier: wrong quantified expression.");
         }
     }
     while(re[ptr]!=CLOSE_QBRACKET)
@@ -216,7 +216,8 @@ Component* parse_subcomp(int &ptr, char *re){
                     process_quantifier(re, ptr, &lb, &ub);
                     break;
                 default:
-                    fatal("parse: wrong repetition char.");
+                    lb = ub = 0;
+                    fatal((char*)"parse: wrong repetition char.");
                     break;
             }
             comp = new ComponentRepeat(comp, lb, ub);
@@ -224,10 +225,10 @@ Component* parse_subcomp(int &ptr, char *re){
 
         compSeq->add(comp);
     }
-    if(re[ptr] != ')') fatal("parse_sub: sematic wrong.");
+    if(re[ptr] != ')') fatal((char*)"parse_sub: sematic wrong.");
     ptr++;
 
-    if(compAlter != NULL)
+    if(compAlter != nullptr)
     {
         compAlter->add(compSeq);
         return compAlter;
@@ -238,9 +239,9 @@ Component* parse_subcomp(int &ptr, char *re){
 Component* parse(char *re) {
     int ptr = 0;
     bool flag_anchor = false;
-    ComponentSequence* compSeq = new ComponentSequence();
-    Component* comp = NULL;
-    ComponentAlternation* compAlter = NULL;
+    auto* compSeq = new ComponentSequence();
+    Component* comp = nullptr;
+    ComponentAlternation* compAlter = nullptr;
 
     if(re[ptr] == '^'){
         flag_anchor = true;
@@ -266,7 +267,7 @@ Component* parse(char *re) {
                 break;
             case '|':
                 ptr++;
-                if(compAlter == NULL) compAlter = new ComponentAlternation();
+                if(compAlter == nullptr) compAlter = new ComponentAlternation();
                 compAlter->add(compSeq);
                 compSeq = new ComponentSequence();
                 continue;
@@ -281,7 +282,7 @@ Component* parse(char *re) {
         }
 
         if(is_repetition(re[ptr])){
-            int lb, ub;
+            int lb = 0, ub = 0;
             switch (re[ptr]){
                 case PLUS:
                     ptr++;
@@ -302,7 +303,8 @@ Component* parse(char *re) {
                     process_quantifier(re, ptr, &lb, &ub);
                     break;
                 default:
-                    fatal("parse: wrong repetition char.");
+                    lb = ub = 0;
+                    fatal((char*)"parse: wrong repetition char.");
                     break;
             }
             comp = new ComponentRepeat(comp, lb, ub);
@@ -311,7 +313,7 @@ Component* parse(char *re) {
         compSeq->add(comp);
     }
 
-    if(compAlter != NULL)
+    if(compAlter != nullptr)
     {
         compAlter->add(compSeq);
         return compAlter;
