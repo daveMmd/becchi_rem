@@ -5,12 +5,34 @@
 #ifndef BECCHI_REGEX_PREFIX_DFA_H
 #define BECCHI_REGEX_PREFIX_DFA_H
 #include "Fb_DFA.h"
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
 
 /*
  * 用于模拟fpga multi dfa 架构的CPU负担
  * */
 class prefix_DFA{
+private:
+    friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        //ar& prefix_dfa;
+        ar& id;
+
+        ar& next_node;
+        ar& parent_node;
+        ar& depth;
+        ar& flag_activate_once;
+        ar& is_activate;
+        ar& is_silent;
+
+        ar& complete_re_string;
+        ar& re_string;
+    }
 public:
+    static int gid; //prefixDFA global id
+
     char *complete_re; //for debug : correspond to original rule
     //string complete_re;
     char *re; //debug: correspond to the re part compiled in dfa
@@ -19,6 +41,9 @@ public:
     DFA* prefix_dfa;
     prefix_DFA* next_node;
     prefix_DFA* parent_node;
+
+    int id;//prefixDFA id
+
     int depth;//determined depth of mid part (only used in mid-DFA)
 
     //activate next post dfa(i.e., next_node)
@@ -26,7 +51,13 @@ public:
     bool is_activate;//cowork with flag_activate_once
     bool is_silent;
 
+    string complete_re_string;
+    string re_string;
+
     prefix_DFA(){
+        complete_re = nullptr;
+        depth = 0;
+        id = (gid++);
         is_activate = false;
         flag_activate_once = false;
         is_silent = false;
@@ -136,6 +167,30 @@ public:
                 node = node->next_node;
             }
         }
+    }
+
+    void dump_dfa(){
+        char filename[100];
+        sprintf(filename, "./dfas/dfa_%d.bin", id);
+        FILE* f = fopen(filename, "w");
+        if(f != nullptr){
+            prefix_dfa->put(f);
+            fclose(f);
+        }
+        else fprintf(stderr, "cannot open the file!\n");
+    }
+
+    void import_dfa(){
+        char filename[100];
+        sprintf(filename, "./dfas/dfa_%d.bin", id);
+        FILE* f = fopen(filename, "r");
+        if(f != nullptr){
+            //if(prefix_dfa == nullptr)
+            prefix_dfa = new DFA();
+            prefix_dfa->get(f);
+            fclose(f);
+        }
+        else fprintf(stderr, "cannot open the file!\n");
     }
 };
 #endif //BECCHI_REGEX_PREFIX_DFA_H

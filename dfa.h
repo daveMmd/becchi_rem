@@ -65,6 +65,8 @@
 #include <map>
 #include <set>
 #include <list>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
 
 using namespace std;
 
@@ -83,11 +85,30 @@ typedef list<tx_t> tx_list;
 
 
 class DFA {
+private:
+    friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        //ar& _size;
+        //ar& state_table;
+        /*for(int i=0; i<_size; i++){
+            for(int c = 0; c < CSIZE; c++) ar& state_table[i][c];
+        }*/
+
+        //ar& accepted_rules;
+        //is_accept = new int[_size];
+        //for(int i=0; i<_size; i++) ar& is_accept[i];
+
+        //ar& dead_state;
+    }
 protected:
-        /**/
-        bool flag_mask_table;
-		/*number of states in the DFA*/
+        /*number of states in the DFA*/
         unsigned _size;
+
+        /**/
+        int *is_accept;
+        bool flag_mask_table;
 
 		/* state_table[old_state][symbol]=new_state*/
 	    state_t **state_table;

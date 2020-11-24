@@ -7,7 +7,11 @@ project(becchi_regex)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_C_FLAGS "-w -g" )
-set(CMAKE_CXX_FLAGS "-w -g")
+set(CMAKE_CXX_FLAGS "-w -g -lboost_serialization")
+
+#使用boost 库
+include_directories(/usr/local/Cellar/boost/1.70.0/include)
+link_directories(/usr/local/Cellar/boost/1.70.0/lib/)
 #set(CMAKE_CXX_FLAGS "-fopenmp -w")
 #set(CMAKE_CXX_FLAGS "-fopenmp -w -O4 -I.." )
 
@@ -37,7 +41,6 @@ add_executable(regex_nmdfa stdinc.cpp int_set.cpp linked_set.cpp subset.cpp dhea
 add_executable(regex_becchi stdinc.cpp int_set.cpp linked_set.cpp subset.cpp dheap.cpp partition.cpp wgraph.cpp nfa.cpp dfa.cpp c_type.cpp ecdfa.cpp parser.cpp becchi.cpp main_becchi.cpp)
 
 #add_executable(regex_dave ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} main_dave.cpp ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp dave_util.cpp dave_nfa.cpp)# dave_nfa.cpp
-#add_executable(test_dave test_dave.cpp)
 
 add_executable(regex_hfa ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} main_testhfa.cpp ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp hierarMerging.cpp dave_nfa.cpp hfadump.cpp set.cpp)
 
@@ -52,8 +55,7 @@ add_subdirectory(component_tree)
 add_executable(bram_fpga2 dave_subset.cpp ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} main_fpga_2.cpp ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp hierarMerging.cpp dave_nfa.cpp hfadump.cpp set.cpp Fb_DFA.cpp Fb_DFA.h Fb_NFA.cpp Fb_NFA.h)
 target_link_libraries(bram_fpga2 parse)
 
-#使用boost 库
-#include_directories(/usr/local/Cellar/boost/1.70.0/include)
-#link_directories(/usr/local/Cellar/boost/1.70.0/lib/)
+add_executable(runtime_fpga runtime_fpga.cpp dave_subset.cpp ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp hierarMerging.cpp dave_nfa.cpp hfadump.cpp set.cpp Fb_DFA.cpp Fb_DFA.h Fb_NFA.cpp Fb_NFA.h)
 
-add_executable(runtime_fpga runtime_fpga.cpp)
+add_executable(test_dave test_dave.cpp)
+#target_link_libraries(boost_serialization)

@@ -785,6 +785,9 @@ void DFA::put(FILE *file, char *comment){
 		while(ls!=NULL && !ls->empty()){fprintf(file," %u",ls->value());ls=ls->succ();}
 		fprintf(file, " )\n");	
 	}
+
+	//record dead state
+	fprintf(file, "%u\n", dead_state);
 }
 
 /*Read the dfa from file.*/
@@ -858,7 +861,8 @@ void DFA::get(FILE *file){
 		fseek(file,posn,SEEK_SET);
 		res = getc(file); if (res!=')') fatal((char*)"DFA:: get: invalid format");
 		res = getc(file); if (res!='\n') fatal((char*)"DFA:: get: invalid format");
-	}	
+	}
+	fscanf(file, "%u", &dead_state);
 	//reconstructing state table
 	for (state_t s=0;s<_size;s++)
 		for (int c=0;c<CSIZE;c++)

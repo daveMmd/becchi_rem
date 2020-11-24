@@ -279,20 +279,6 @@ void try_insert_new_accept(Fb_DFA *dfa1, Fb_DFA *dfa2, Fb_DFA *newdfa, state_t s
     if(a2 != nullptr) newa->insert(newa->end(), a2->begin(), a2->end());
 }
 
-/*dfa will not change*/
-void init_accept_rules(Fb_DFA* dfa){
-    if(dfa->accept_to_prefix_dfa == nullptr){
-        dfa->accept_to_prefix_dfa = (list<uint16_t >**) malloc(sizeof(list<uint16_t>*) * dfa->_size);
-        for(state_t s = 0; s < dfa->_size; s++) {
-            if(dfa->is_accept[s]) {
-                dfa->accept_to_prefix_dfa[s] = new list<uint16_t>();
-                dfa->accept_to_prefix_dfa[s]->push_back(dfa->ind_prefixdfa_single);
-            }
-            else dfa->accept_to_prefix_dfa[s] = nullptr;
-        }
-    }
-}
-
 Fb_DFA *Fb_DFA::converge(Fb_DFA *dfa) {
     /*1.filter: assume convergence will definitely cause a increase of state num*/
     if(this->size() + dfa->size() > MAX_STATES_NUMBER*1.2) return nullptr;
@@ -300,8 +286,8 @@ Fb_DFA *Fb_DFA::converge(Fb_DFA *dfa) {
     if(big_states_num > MAX_BIG_SATES_NUMBER*1.2) return nullptr;
 
     //init the two dfa`s accept_rule_list
-    init_accept_rules(this);
-    init_accept_rules(dfa);
+    //init_accept_rules(this);
+    //init_accept_rules(dfa);
 
     /*2.merge 2 dfas*/
     Fb_DFA* new_dfa = new Fb_DFA();

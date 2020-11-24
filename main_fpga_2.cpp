@@ -14,8 +14,15 @@
 #include "prefix_DFA.h"
 #include "trace.h"
 
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/serialization/vector.hpp> //序列化STL容器要导入
+#include <iostream>
+#include <fstream>
+
 int VERBOSE;
 int DEBUG;
+int prefix_DFA::gid = 0;
 
 /* usage */
 static void usage()
@@ -121,12 +128,30 @@ int cmp(const void* p1, const void* p2){
     Fb_DFA *dfa2 = *(Fb_DFA **)p2;
     return dfa2->size() - dfa1->size();
 }
+
+/*dfa will not change*/
+void init_accept_rules(Fb_DFA* dfa){
+    if(dfa->accept_to_prefix_dfa == nullptr){
+        dfa->accept_to_prefix_dfa = (list<uint16_t >**) malloc(sizeof(list<uint16_t>*) * dfa->_size);
+        for(state_t s = 0; s < dfa->_size; s++) {
+            if(dfa->is_accept[s]) {
+                dfa->accept_to_prefix_dfa[s] = new list<uint16_t>();
+                dfa->accept_to_prefix_dfa[s]->push_back(dfa->ind_prefixdfa_single);
+            }
+            else dfa->accept_to_prefix_dfa[s] = nullptr;
+        }
+    }
+}
+
 /*
  * 1.first group largest dfa(with most dfa states)
  * 2.try to converge as many small dfa as possible
  * 3.guarantee worst run time
  * */
 Fb_DFA** greedy_group(list<Fb_DFA *> *dfa_lis, int& fbdfa_num){
+    /*init all dfa accept to prefix list*/
+    for(auto &it: *dfa_lis) init_accept_rules(it);
+
     /*sort dfa according size*/
     Fb_DFA *tem_lis[10000];
     int cnt=0;
@@ -574,6 +599,43 @@ void generate_fpga_stt(Fb_DFA** fb_dfas, int fbdfa_num){
     printf("finsished generating fpga_stt.\n");
 }
 
+void serialize_prefixdfa(vector<prefix_DFA*> *vec_prefixdfa){
+    ofstream ofs("vec_prefix_dfas.bin");
+    if (ofs.is_open()) {
+        //dump the dfa of each prefixdfa
+        for(auto &it: *vec_prefixdfa){
+            /*convert char * to string*/
+            it->complete_re_string = it->complete_re; //debug
+            it->re_string = it->re;
+
+            it->dump_dfa();
+            prefix_DFA* parentNode = it->parent_node;
+            while(parentNode != nullptr) {
+                parentNode->dump_dfa();
+                parentNode = parentNode->parent_node;
+            }
+            prefix_DFA* childNode = it->next_node;
+            //if(childNode == nullptr) it->complete_re_string = it->complete_re;
+            while(childNode != nullptr){
+                childNode->dump_dfa();
+                //record the matching string in the last node
+                //if(childNode->next_node == nullptr) childNode->complete_re_string = it->complete_re;
+
+                childNode = childNode->next_node;
+            }
+        }
+
+        boost::archive::text_oarchive oa(ofs);
+        oa << (*vec_prefixdfa);
+        ofs.close();
+        return ;
+    }
+    else {
+        cout << "打开失败" << endl;
+        return ;
+    }
+}
+
 /*
  *  MAIN - entry point
  */
@@ -647,6 +709,9 @@ int main(int argc, char **argv){
     printf("grouping fb_dfa cost time:%llf seconds\n", (end.tv_sec - start.tv_sec) + 0.000001 * (end.tv_usec - start.tv_usec));
     /*generate STT for fbdfas in FPGA*/
     generate_fpga_stt(fbdfas, fbdfa_num);
+    //serialize
+    serialize_prefixdfa(vec_prefixDFA);
+
 #endif
 
     //simulate to examine CPU burden
