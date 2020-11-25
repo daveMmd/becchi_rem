@@ -20,7 +20,7 @@ if(Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIRS})
     link_directories(${Boost_LIBRARY_DIRS})
 else()
-    message(FATAL_ERROR "Boost library not found!")
+    message(FATAL_ERROR "FATAL: Boost library not found!")
 endif()
 
 
