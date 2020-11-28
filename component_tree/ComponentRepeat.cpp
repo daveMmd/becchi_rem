@@ -70,7 +70,8 @@ bool ComponentRepeat::decompose(double cur_pmatch, int &threshold, std::bitset<2
         }
 
         //check if reach decompose for pmatch
-        if(cut >= max_cut_forpmatch || j >= max_cut_forpmatch){
+        //if(cut >= max_cut_forpmatch || j >= max_cut_forpmatch){
+        if(cut >= max_cut_forpmatch || m_min >= max_cut_forpmatch){
             cut = max_cut_forpmatch;
             flag_decompose = true;
         }
@@ -120,6 +121,11 @@ bool ComponentRepeat::decompose(double cur_pmatch, int &threshold, std::bitset<2
 
 OUT_IF:
     if(flag_decompose){
+        /*判定一个特殊条件：即当前charclass匹配概率过大时，放弃将其包含于prefix中*/
+        if(typeid(*sub_comp) == typeid(ComponentClass) && sub_comp->p_match() > 240.0/256){
+            cut = 0;
+        }
+
         int tem_min = m_min;
         int tem_max = m_max;
         cut = min(cut, m_min);
