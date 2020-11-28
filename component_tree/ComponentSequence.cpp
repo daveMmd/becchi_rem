@@ -20,17 +20,32 @@ int ComponentSequence::num_concat() {
 bool ComponentSequence::decompose(double cur_pmatch, int &threshold, std::bitset<256> &alpha, char* R_pre, char* R_post, int& depth, std::bitset<256> *first_charClass, std::bitset<256> *last_infinite_charclass, bool top) {
     if(cur_pmatch < PMATCH_THRESHOLD) return true;
 
+    /*backup*/
+    double _cur_pmatch = cur_pmatch;
+    int _threshold = threshold;
+    char _R_pre[1000], _R_post[1000];
+    int _depth = depth;
+    std::bitset<256> _alpha, _first_charClass, _last_infinite_charclass;
+    strcpy(_R_pre, R_pre);
+    strcpy(_R_post, R_post);
+    _alpha = alpha;
+    _first_charClass = *first_charClass;
+    _last_infinite_charclass = *last_infinite_charclass;
+
     int last_dotstar_pos = 0; //to locate the position of the last .*
     int pos = 0;
     for(auto &it: children){
         pos++;
         if(typeid(*it) == typeid(ComponentRepeat))
+        {
             if(((ComponentRepeat*)it)->is_dotstar()) last_dotstar_pos = pos;
+            ((ComponentRepeat*)it)->save_value();
+        }
+
     }
 
     bool res = false;
     pos = 0;
-    double _cur_pmatch = cur_pmatch;
 
     /*if anchor rule, start_pmatch *= 0.001 (PMATCH_ANCHOR)*/
     double start_pmatch = 1;
@@ -50,10 +65,62 @@ bool ComponentSequence::decompose(double cur_pmatch, int &threshold, std::bitset
         }
         else if(res){
             strcat(R_post, it->get_re_part());
+            pos--;
         }
         //update cur_pmatch. for cur_pmatch > 1, not to update
         if(cur_pmatch <= 1) cur_pmatch = cur_pmatch * it->p_match();
     }
+
+    /*未成功提取最后一个.*-like part*/
+    if(_cur_pmatch <= 1 && top && pos <= (last_dotstar_pos + 1) && res){
+        //roll back two global members
+        lis_R_pre.clear();
+        lis_R_post.clear();
+        //roll back all the changed local members
+        //pos = 0;
+        cur_pmatch = _cur_pmatch;
+        res = false;
+        threshold = _threshold;
+        alpha = _alpha;
+        strcpy(R_pre, _R_pre);
+        strcpy(R_post, _R_post);
+        depth = _depth;
+        *first_charClass = _first_charClass;
+        *last_infinite_charclass = _last_infinite_charclass;
+
+        //得到可以覆盖的最后一个.*的位置
+        last_dotstar_pos = 0;
+        int new_pos = 0;
+        for(auto &it: children){
+            if(typeid(*it) == typeid(ComponentRepeat)){
+                ((ComponentRepeat*)it)->recover_value();
+            }
+            new_pos++;
+            if(new_pos >= (pos-1)) continue;
+            if(typeid(*it) == typeid(ComponentRepeat))
+                if(((ComponentRepeat*)it)->is_dotstar()) last_dotstar_pos = new_pos;
+        }
+
+        pos = 0;//roll back pos
+
+        /*重复前一次动作，除了last_dotstar_pos改变外，其他均不变*/
+        for(auto & it : children){
+            pos++;
+            if(top && pos <= last_dotstar_pos) cur_pmatch = 2;
+            else if(_cur_pmatch <= 1 && cur_pmatch >= 1) cur_pmatch = start_pmatch;
+
+            if(threshold <= 0) res = true;
+            if(!res && it->decompose(cur_pmatch, threshold, alpha, R_pre, R_post, depth, first_charClass, last_infinite_charclass, top)){
+                res = true;
+                if(typeid(*it) == typeid(ComponentClass)) strcat(R_post, it->get_re_part());
+            }
+            else if(res){
+                strcat(R_post, it->get_re_part());
+            }
+            if(cur_pmatch <= 1) cur_pmatch = cur_pmatch * it->p_match();
+        }
+    }
+
     return res;
 }
 

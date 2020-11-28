@@ -107,8 +107,6 @@ double decompose(char *re, char *R_pre, char *R_post, int threshold, bool use_pm
 #endif
 
     delete comp;
-
-    if(flag_anchor) p_match *= 0.001; //inclined to use anchor R_pre
     return p_match;
 }
 

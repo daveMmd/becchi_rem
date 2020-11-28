@@ -643,8 +643,9 @@ int regex_parser::process_range(NFA **fa, NFA **to_link, const char *re, int ptr
 		else
 			ptr++;
 		if (from==(CSIZE+1)) from=to;	
-		if (ptr!=strlen(re)-1 && re[ptr]==MINUS_RANGE){ 
-			ptr++;	
+		//if (ptr!=strlen(re)-1 && re[ptr]==MINUS_RANGE){
+        if (ptr!=strlen(re)-1 && re[ptr]==MINUS_RANGE && from==to){
+            ptr++;
 		}else{
 			if (from>to)
 				fatal("regex_parser:: process_range: invalid range.");

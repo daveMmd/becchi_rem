@@ -16,6 +16,9 @@ public:
     Component* sub_comp;
     int m_min;
     int m_max;
+    //used to save unchanged value (for algorithm use)
+    int _m_min;
+    int _m_max;
 
     ~ComponentRepeat() override;
     int num_concat() override;
@@ -28,6 +31,16 @@ public:
     double p_match() override;
 
     bool is_dotstar();
+
+    void save_value(){
+        _m_min = m_min;
+        _m_max = m_max;
+    };
+
+    void recover_value(){
+        m_min = _m_min;
+        m_max = _m_max;
+    }
 };
 
 

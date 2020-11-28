@@ -315,9 +315,10 @@ list<prefix_DFA*>* compile_single_to_lis(char* re){
         double p_match = decompose(re, R_pre, R_post, threshold);
         if(p_match > T_MATCH && strcmp(re, R_pre) != 0){
             //todo 尝试提取规则其他部分
-            printf("bad R_pre:%s\n", R_pre);
+            printf("bad R_pre (later try middle extract):%s. \n", R_pre);
             return nullptr;
         }
+        /*与分解|时产生多个prefix和postfix兼容。*/
         if(lis_R_pre.empty()) {
             char *tmp_pre = (char *) malloc(1000);
             char *tmp_post = (char *) malloc(1000);
@@ -326,6 +327,7 @@ list<prefix_DFA*>* compile_single_to_lis(char* re){
             lis_R_pre.push_back(tmp_pre);
             lis_R_post.push_back(tmp_post);
         }
+
         float ratio = 0;
         for(auto &it: lis_R_pre){
             fbdfa = nullptr;
@@ -636,6 +638,54 @@ void serialize_prefixdfa(vector<prefix_DFA*> *vec_prefixdfa){
     }
 }
 
+bool sort_prefixdfa(prefix_DFA* pd1, prefix_DFA* pd2){
+    return pd1->fbDfa->size() > pd2->fbDfa->size();
+}
+
+void show_expensive_re(list<prefix_DFA*> *prefix_dfa_list){
+
+    prefix_dfa_list->sort(sort_prefixdfa);
+    for(auto &it: *prefix_dfa_list){
+        printf("size:%d, complete_re:%s\n", it->fbDfa->size(), it->complete_re);
+    }
+    exit(0);
+}
+
+void clear_redundant(list<char *> *regex_list){
+    //printf("regex_list size:%d\n", regex_list->size());
+    list<char*> tem_lis;
+    for(auto &it1: *regex_list){
+        bool flag_first = true;
+        for(auto &it2: *regex_list){
+            if(flag_first && it2 != it1) {
+                continue;
+            }
+            if(flag_first){
+                flag_first = false;
+                continue;
+            }
+
+            if(strcmp(it1, it2) == 0) {
+                //printf("redundant re:%s\n", it1);
+                tem_lis.push_back(it1);
+                break;
+            }
+        }
+    }
+
+    printf("redundant regex num:%d\n", tem_lis.size());
+
+    for(auto &it1: tem_lis){
+        for(auto &it2: *regex_list) {
+            if(it1 == it2){
+                regex_list->remove(it1);
+                break;
+            }
+        }
+    }
+    //printf("regex_list size:%d\n", regex_list->size());
+}
+
 /*
  *  MAIN - entry point
  */
@@ -660,8 +710,10 @@ int main(int argc, char **argv){
     }
 
     list<char *> *regex_list = read_regexset(config.regex_file);
+    clear_redundant(regex_list);
     //过滤一些暂不支持，或者耗时/影响性能的规则
     block_re(regex_list);
+    //exit(0);
 
     gettimeofday(&start, nullptr);
     list<prefix_DFA*> *prefix_dfa_list = compile(regex_list);
@@ -670,6 +722,8 @@ int main(int argc, char **argv){
 
 #if 1
     debug_prefix_dfa_size(prefix_dfa_list);
+    //show which re is expensive
+    //show_expensive_re(prefix_dfa_list);
 #endif
 #if 1
     //print statics

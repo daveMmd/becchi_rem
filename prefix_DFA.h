@@ -8,6 +8,14 @@
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 
+
+struct _packet{
+    char* data;
+    int length;
+    uint32_t id;
+};
+
+typedef struct _packet packet_t;
 /*
  * 用于模拟fpga multi dfa 架构的CPU负担
  * */
@@ -192,5 +200,10 @@ public:
         }
         else fprintf(stderr, "cannot open the file!\n");
     }
+
+    void match(packet_t * packet, uint16_t offset, void (*callback)(packet_t *, char*) = nullptr);
+
+    /*match the pre part (if have)*/
+    bool pre_match(char* data, uint16_t offset);
 };
 #endif //BECCHI_REGEX_PREFIX_DFA_H

@@ -97,10 +97,20 @@ void test_using_software(){
  *
  * */
 bool process_one_prefix_match(prefix_match* p_prefixMatch){
+    //todo
     /*locate which prefix Dfas*/
     uint32_t key = p_prefixMatch->DFA_id * 212 + p_prefixMatch->state;
     list<uint16_t>* prefix_dfa_ids = (*mapping_table)[key];
 
+    //locate which package
+    packet_t *packet = nullptr;//todo
+
+    for(auto &dfa_id: *prefix_dfa_ids){
+        prefix_DFA* prefixDfa = vec_prefixdfa[dfa_id];
+        prefixDfa->match(packet, p_prefixMatch->offset);
+    }
+
+    //reset the prefixMatch flag, to show that it has been handled
 }
 
 /* 初始化 fpga，建立通讯通道
@@ -110,11 +120,81 @@ void init_fpga(){
     return;
 }
 
+/*macros determined by FPGA implementation*/
+#define BRAM_NUM_SINGLE_UNIT 60
+#define UNIT_NUMBER 28
+#define M20K_CAP 2560
+
+void** read_stt(int &num){
+    FILE* f = fopen("./fpga_stt.bin", "rb");
+    uint8_t buff[M20K_CAP + 5];
+    num = 0;
+    void** stts = (void**) malloc(sizeof(void*) * BRAM_NUM_SINGLE_UNIT * UNIT_NUMBER);
+    memset(stts, 0, sizeof(void*) * BRAM_NUM_SINGLE_UNIT * UNIT_NUMBER);
+
+    while(fread(buff, M20K_CAP, 1, f) == 1){
+        uint8_t* stt = (uint8_t*) malloc(sizeof(uint8_t) * M20K_CAP);
+        memcpy(stt, buff, M20K_CAP);
+        stts[num++] = stt;
+    }
+
+    fclose(f);
+    return stts;
+}
+
+void write_to_fpga_bram(void* stt, int bram_logic_num){
+    //todo
+};
+
 void load_fpga_stt(){
+    //todo
+    int stt_num;
+    void** stts = read_stt(stt_num);
+    printf("read stt_num: %d\n", stt_num);
+
+    //write to FPGA
+    int need_unit_num;
+    if(stt_num % BRAM_NUM_SINGLE_UNIT  == 0) need_unit_num = stt_num / BRAM_NUM_SINGLE_UNIT;
+    else need_unit_num = stt_num / BRAM_NUM_SINGLE_UNIT + 1;
+    printf("one copy of stt require need_unit_num:%d\n", need_unit_num);
+
+    int copy_num;
+    if(UNIT_NUMBER % need_unit_num == 0) copy_num = UNIT_NUMBER / need_unit_num;
+    else copy_num = UNIT_NUMBER / need_unit_num + 1;
+    printf("maximally contain copy num:%d\n", copy_num);
+
+    for(int i = 0; i < stt_num; i++)
+        for(int j = 0; j < copy_num; j++){
+            write_to_fpga_bram(stts[i], i + j * need_unit_num * BRAM_NUM_SINGLE_UNIT);
+        }
+
+    //free
+    for(int i=0; i<stt_num; i++) free(stts[i]);
+    free(stts);
+}
+
+void *loop_process_prefix_matches(void *arg){
+    //todo
+    printf("hello, new thread!\n");
+}
+
+/*start a thread to process prefix matches
+ *
+ * */
+void start_new_thread_process(){
+    pthread_t tid;
+    if(pthread_create(&tid, nullptr, &loop_process_prefix_matches, nullptr) != 0){
+        fprintf(stderr, "can not create new thread!\n");
+        exit(-1);
+    }
+}
+
+void loop_send_packages(){
     //todo
 }
 
 int main(int argc, char **argv){
+
     //config
     if(argc >= 2) trace_fname = argv[1];
 
@@ -127,14 +207,15 @@ int main(int argc, char **argv){
     //test the correctness of loading databases
     //test_using_software();
 
-    /*load front-end DFAs's STT to FPGA*/
+    /*load front-end DFAs's STT into FPGA*/
     load_fpga_stt();
 
-    /*start a thread to process prefix matches*/
-    start_new_thread_process
+    /*start a thread to process prefix matches returned by FPGA*/
+    start_new_thread_process();
 
-    /*main thread responsible for sending packages*/
+    /*main thread responsible for sending packages to FPGA*/
+    loop_send_packages();
 
-
+    //sleep(5);
     return 0;
 }

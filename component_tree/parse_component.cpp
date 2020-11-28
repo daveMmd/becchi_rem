@@ -103,7 +103,8 @@ ComponentClass* parse_range(int &ptr, char *re){
         else
             ptr++;
         if (from==(CSIZE+1)) from=to;
-        if (ptr!=strlen(re)-1 && re[ptr]==MINUS_RANGE){
+        //if (ptr!=strlen(re)-1 && re[ptr]==MINUS_RANGE){
+        if (ptr!=strlen(re)-1 && re[ptr]==MINUS_RANGE && from == to){
             ptr++;
         }else{
             if (from>to)

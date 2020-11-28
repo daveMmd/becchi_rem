@@ -3,7 +3,10 @@
 // include headers that implement a archive in simple text format
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
+#include "parser.h"
 
+int DEBUG = 0;
+int VERBOSE = 0;
 /////////////////////////////////////////////////////////////
 // gps coordinate
 //
@@ -34,7 +37,7 @@ public:
     {}
 };
 
-int main() {
+void test_serialization(){
     // create and open a character archive for output
     std::ofstream ofs("filename");
 
@@ -59,5 +62,20 @@ int main() {
         ia >> newg;
         // archive and stream closed when destructors are called
     }
+}
+
+int main(int argc, char** argv) {
+    char* rulefile;
+    if(argc > 1) rulefile = argv[1];
+    FILE* f = fopen(rulefile, "r");
+
+    auto parser = regex_parser(false, false);
+    NFA* nfa = parser.parse(f);
+
+    DFA* dfa = nfa->nfa2dfa();
+
+    dfa->minimize();
+
+    printf("nfa size: %d\n, dfa size: %d\n", nfa->size(), dfa->size());
     return 0;
 }
