@@ -364,15 +364,18 @@ list<prefix_DFA*>* compile_single_to_lis(char* re){
 
 //try to extract middle re_part && compile
 //prefix_DFA* try_compile_single_mid(char* re){
-list<prefix_DFA*> * try_compile_single_mid(char* re){
+list<prefix_DFA*> * try_compile_single_mid(char* re, bool simplest=false){
     char R_pre[1000], R_mid[1000], R_post[1000];
     prefix_DFA* prefixDfa_post = nullptr;
     prefix_DFA* prefixDfa_pre = nullptr;
     prefix_DFA* prefixDfa = nullptr;
     auto *lis_prefixDfa = new list<prefix_DFA*>();
     int depth = 0;
+    double p_match = 1.0;
 
-    double p_match = extract(re, R_pre, R_mid, R_post, depth);
+    if(simplest) p_match = extract_simplest(re, R_pre, R_mid, R_post);
+    else  p_match = extract(re, R_pre, R_mid, R_post, depth);
+
     if(p_match > T_MATCH) return nullptr;
 
     //first compile R_mid
@@ -432,7 +435,23 @@ list<prefix_DFA*> *compile(list<char*> *regex_list){
     for(auto &it: *regex_list){
         printf("processing %d/%d re:%s\n", ++cnt, size, it);
         list<prefix_DFA*> *prefixDfa_lis = compile_single_to_lis(it);
+        if(!g_if_contain_dotstar || prefixDfa_lis == nullptr || prefixDfa_lis->empty()){
+            //try extract simplest re part as prefix
+            list<prefix_DFA*> *tem = try_compile_single_mid(it, true);
+            if(tem != nullptr){
+                if(prefixDfa_lis == nullptr){
+                    prefixDfa_lis = tem;
+                }
+                else{
+                    for(auto &it: *prefixDfa_lis) delete it;
+                    delete prefixDfa_lis;
+                    prefixDfa_lis = tem;
+                }
+            }
+        }
+
         if(prefixDfa_lis == nullptr || prefixDfa_lis->empty()) {
+            //try extract avalaible re part as prefix
             prefixDfa_lis = try_compile_single_mid(it);
             //printf("middle extract re:%s\n", it);
         }

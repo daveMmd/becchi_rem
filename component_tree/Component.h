@@ -15,9 +15,12 @@
 //#include "decompose.h"
 extern std::list<char*> lis_R_pre;
 extern std::list<char*> lis_R_post;
+extern bool g_if_contain_dotstar;
 
 class Component {
 public:
+    bool flag_anchor = false;
+
     virtual ~Component() = default;
 
     virtual int num_concat() = 0;

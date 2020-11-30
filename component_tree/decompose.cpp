@@ -19,7 +19,11 @@
  * */
 std::list<char*> lis_R_pre; //used to save multiple R_pres
 std::list<char*> lis_R_post; //used to save multiple R_posts (correspond to lis_R_pre)
+bool g_if_contain_dotstar;
+
 double decompose(char *re, char *R_pre, char *R_post, int threshold, bool use_pmatch, bool control_top) {
+    //init only when called by prefix extraction
+    if(use_pmatch) g_if_contain_dotstar = false;
     double p_match = 0;
     //init R_pre and R_post
     R_pre[0] = '\0';
@@ -181,4 +185,28 @@ bool contain_dotstar(char *re){
         if(((ComponentRepeat*)it)->is_dotstar()) return true;
     }
     return false;
+}
+
+double extract_simplest(char *re, char *R_pre, char* R_middle, char *R_post){
+    //todo
+    //init R_pre, R_mid, R_post
+    R_pre[0] = '\0';
+    R_middle[0] = '\0';
+    R_post[0] = '\0';
+
+    //case 1. 假设从顶层sequence中提取,仅考虑class, class's repeat, sequence, sequence's repeat.
+    Component* comp_tree = parse(re);
+    if(typeid(*comp_tree) == typeid(ComponentSequence)){
+        ((ComponentSequence*) comp_tree)->extract_simplest(R_pre, R_middle, R_post);
+        delete comp_tree;
+
+        if(strlen(R_middle) > 0){
+            Component* comp = parse(R_middle);
+            double p_match = comp->p_match();
+            delete comp;
+            return p_match;
+        }
+    }
+
+    return 1.0;
 }

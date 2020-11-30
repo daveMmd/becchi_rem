@@ -32,7 +32,7 @@ bool ComponentSequence::decompose(double cur_pmatch, int &threshold, std::bitset
     _first_charClass = *first_charClass;
     _last_infinite_charclass = *last_infinite_charclass;
 
-    int last_dotstar_pos = 0; //to locate the position of the last .*
+    int last_dotstar_pos = -1; //to locate the position of the last .*
     int pos = 0;
     for(auto &it: children){
         pos++;
@@ -71,6 +71,8 @@ bool ComponentSequence::decompose(double cur_pmatch, int &threshold, std::bitset
         if(cur_pmatch <= 1) cur_pmatch = cur_pmatch * it->p_match();
     }
 
+    /*可提取最后一个dotstar*/
+    if(_cur_pmatch <= 1 && top && last_dotstar_pos >= 0 && pos > (last_dotstar_pos + 1)) g_if_contain_dotstar = true;
     /*未成功提取最后一个.*-like part*/
     if(_cur_pmatch <= 1 && top && pos <= (last_dotstar_pos + 1) && res){
         //roll back two global members
@@ -89,7 +91,7 @@ bool ComponentSequence::decompose(double cur_pmatch, int &threshold, std::bitset
         *last_infinite_charclass = _last_infinite_charclass;
 
         //得到可以覆盖的最后一个.*的位置
-        last_dotstar_pos = 0;
+        last_dotstar_pos = -1;
         int new_pos = 0;
         for(auto &it: children){
             if(typeid(*it) == typeid(ComponentRepeat)){
@@ -98,7 +100,10 @@ bool ComponentSequence::decompose(double cur_pmatch, int &threshold, std::bitset
             new_pos++;
             if(new_pos >= (pos-1)) continue;
             if(typeid(*it) == typeid(ComponentRepeat))
-                if(((ComponentRepeat*)it)->is_dotstar()) last_dotstar_pos = new_pos;
+                if(((ComponentRepeat*)it)->is_dotstar()) {
+                    last_dotstar_pos = new_pos;
+                    g_if_contain_dotstar = true;/*可提取至少一个dotstar*/
+                }
         }
 
         pos = 0;//roll back pos
@@ -173,7 +178,7 @@ void ComponentSequence::extract(char *R_pre, char *R_mid, char *R_post, int thre
                 ES1 = *former_charclass[0];
                 charclass = ((ComponentClass *) sub)->charReach;
                 if((ES1&charclass).none()){
-                    NO_EXPLOSION:
+NO_EXPLOSION:
                     int cut = min(lef_threshold, m_min);
                     tem_cut_num = cut;
                     lef_threshold -= cut;
@@ -190,7 +195,7 @@ void ComponentSequence::extract(char *R_pre, char *R_mid, char *R_post, int thre
                 goto CUT;
             }
 
-            if(m_min != m_max) goto CUT; //cause length not determined
+            if(m_min != m_max) goto CUT; //because length not determined
         }
         else{//Alternation, break
             goto CUT;
@@ -198,7 +203,7 @@ void ComponentSequence::extract(char *R_pre, char *R_mid, char *R_post, int thre
 
         //reach to threshold, CUT
         if(lef_threshold <= 0){
-            CUT:
+CUT:
             //p_match_minimum = min(p_match_minimum, p_match);
             if(p_match_minimum > p_match){//update
                 p_match_minimum = p_match;
@@ -259,4 +264,49 @@ char *ComponentSequence::get_reverse_re() {
         strcat(re_part, (*it)->get_re_part());
     }
     return re_part;
+}
+
+void ComponentSequence::extract_simplest(char *R_pre, char *R_mid, char *R_post) {
+
+    uint32_t char_num_minimum = 0xffffffff;
+    int simplest_position = -1;
+    int last_position = 0;
+    //used to record cut position
+
+    //first calculate the position where simplest cut occurs
+    for(int i = 0; i < children.size(); i++) {
+        uint32_t char_num = 0;
+        double p_match = 1.0;
+        if(i==0 && flag_anchor) p_match *= PMATCH_ANCHOR;
+        for(int j = i; j < children.size(); j++){
+            Component* comp_j = children[j];
+            if(typeid(*comp_j) == typeid(ComponentClass)){
+                p_match *= comp_j->p_match();
+                char_num += ((ComponentClass*)comp_j)->charReach.size();
+            }
+            else{//其他均暂不处理
+                break;
+            }
+            /*判定re是否满足最高匹配概率要求*/
+            if(p_match <= PMATCH_THRESHOLD && char_num < char_num_minimum){
+                char_num_minimum = char_num;
+                simplest_position = i;
+                last_position = j;
+                break;
+            }
+        }
+    }
+
+    if(simplest_position == -1) return; /*FAIL*/
+
+    if(flag_anchor){
+        if(simplest_position == 0) strcat(R_mid, "^");
+        else strcat(R_pre, "^");
+    }
+
+    for(int i = 0; i < children.size(); i++){
+        if(i < simplest_position) strcat(R_pre, children[i]->get_re_part());
+        else if(i <= last_position) strcat(R_mid, children[i]->get_re_part());
+        else strcat(R_post, children[i]->get_re_part());
+    }
 }

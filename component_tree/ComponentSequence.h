@@ -32,6 +32,9 @@ public:
     char* get_reverse_re() override ;
 
     void extract(char* R_pre, char* R_mid, char* R_post, int threshold);
+
+    /*尝试提取最简单的re部分（达到p_match_threshold的包含字符数量最小的re部分）*/
+    void extract_simplest(char* R_pre, char* R_mid, char* R_post);
 };
 
 

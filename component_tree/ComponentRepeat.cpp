@@ -28,11 +28,12 @@ bool ComponentRepeat::decompose(double cur_pmatch, int &threshold, std::bitset<2
     bool flag_decompose = false;
     int j = max(m_min, m_max);
     int cut = -1;
-    //only consider the situation that sub_comp is char class
+    //consider the situation that sub_comp is char class
     if(typeid(*sub_comp) == typeid(ComponentClass)){
         int max_cut_forpmatch = 0xfffffff;
         if(PMATCH_THRESHOLD > 0 && cur_pmatch <= 1 && sub_comp->p_match() < 1) max_cut_forpmatch = ceil(log(PMATCH_THRESHOLD / cur_pmatch) / log(sub_comp->p_match()));
         std::bitset<256> &beta = ((ComponentClass*)sub_comp)->charReach;
+
         //alpha*beta{j}, when alpha < beta || alpha ^ beta && alpha^beta!=beta 发生O(j^2)状态膨胀
         if(last_infinite_charclass->any() && ((*last_infinite_charclass) & beta).any() && ((*last_infinite_charclass) & beta) != beta){
             if(j <= 1) threshold -= j;
@@ -88,6 +89,12 @@ bool ComponentRepeat::decompose(double cur_pmatch, int &threshold, std::bitset<2
         }
 
         if(m_max != _INFINITY && m_min != 0) last_infinite_charclass->reset();
+
+        /*考虑.{0,n}ES导致的O(n|ES|)数量级的状态膨胀*/
+        if(!flag_decompose && (beta.count() > 240) && ((m_max - m_min) > 100)){
+            strcat(R_pre, get_re_part());
+            return true;
+        }
     }
     //(RE){m,n} situation
     else{

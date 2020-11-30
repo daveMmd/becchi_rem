@@ -317,7 +317,11 @@ Component* parse(char *re) {
     if(compAlter != nullptr)
     {
         compAlter->add(compSeq);
+        compAlter->flag_anchor = flag_anchor;
         return compAlter;
     }
-    else return compSeq;
+    else {
+        compSeq->flag_anchor = flag_anchor;
+        return compSeq;
+    }
 }
