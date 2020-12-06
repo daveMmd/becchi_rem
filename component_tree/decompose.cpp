@@ -76,15 +76,29 @@ double decompose(char *re, char *R_pre, char *R_post, int threshold, bool use_pm
             p_match = std::max(p_match, comp->p_match());
             delete comp;
         }
+        if(flag_anchor) p_match *= PMATCH_ANCHOR;
         return p_match;
     }
 
     //failed to decompose
     if(strlen(R_pre) == 0 || strcmp(R_pre, "^") == 0) return 1.0;
-
     Component* comp = parse(R_pre);
+
+    /*前缀分解时，避免连续重复字符类作为前缀（将引起大量CPU overhead）*/
+    if(!flag_anchor && use_pmatch && !control_top && typeid(*comp) == typeid(ComponentSequence)){ //首先判定此时为前缀分解
+        auto* compSeq = (ComponentSequence*) comp;
+        if(compSeq->children.size() == 1 && typeid(*compSeq->children[0]) == typeid(ComponentRepeat)){//连续重复字符类，仅有一个Component (Repeat)
+            auto* compRep = (ComponentRepeat *) compSeq->children[0];
+            if(typeid(*compRep->sub_comp) == typeid(ComponentClass) && ((ComponentClass*)compRep->sub_comp)->charReach.count() > 5){
+                printf("R_pre with consecutive char classes: %s\n", R_pre);
+                return 1.0;
+            }
+        }
+    }
+
     //int n_concat_pre = comp->num_concat();
     p_match = comp->p_match();
+    if(flag_anchor) p_match *= PMATCH_ANCHOR;
 #if 0 //if successfully process () and |, the case R_pre end up with .* will (probably) not occur
     //process the case R_pre end up with .*
     if(strlen(R_post) > 1 && typeid(*comp) == typeid(ComponentSequence)){
@@ -128,9 +142,21 @@ double extract(char *re, char *R_pre, char* R_middle, char *R_post, int &depth, 
     //case 1. 假设从顶层sequence中提取,仅考虑class, class's repeat, sequence, sequence's repeat.
     Component* comp_tree = parse(re);
     if(typeid(*comp_tree) == typeid(ComponentSequence)){
-        ((ComponentSequence*) comp_tree)->extract(R_pre, R_middle, R_post, threshold);
-        delete comp_tree;
+        auto* compSeq = (ComponentSequence*) comp_tree;
 
+        /*避免连续重复字符类作为前缀*/
+        if(typeid(*compSeq->children[0]) == typeid(ComponentRepeat) && compSeq->children[0]->p_match() <= PMATCH_THRESHOLD){
+            auto* compRep = (ComponentRepeat *) compSeq->children[0];
+            if(typeid(*compRep->sub_comp) == typeid(ComponentClass))
+            {
+                compSeq->extract_non_one_repeat(R_pre, R_middle, R_post);
+                goto EXTRACT_NEXT;
+            }
+        }
+        compSeq->extract(R_pre, R_middle, R_post, threshold);
+
+EXTRACT_NEXT:
+        delete comp_tree;
         if(strlen(R_middle) > 0){
             Component* comp = parse(R_middle);
             double p_match = comp->p_match();

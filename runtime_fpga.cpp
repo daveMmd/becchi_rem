@@ -205,7 +205,8 @@ int main(int argc, char **argv){
     load_mapping();
     load_prefixDfas();
     //test the correctness of loading databases
-    //test_using_software();
+    test_using_software();
+    //exit(0);
 
     /*load front-end DFAs's STT into FPGA*/
     load_fpga_stt();

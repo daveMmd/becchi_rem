@@ -644,7 +644,8 @@ int regex_parser::process_range(NFA **fa, NFA **to_link, const char *re, int ptr
 			ptr++;
 		if (from==(CSIZE+1)) from=to;	
 		//if (ptr!=strlen(re)-1 && re[ptr]==MINUS_RANGE){
-        if (ptr!=strlen(re)-1 && re[ptr]==MINUS_RANGE && from==to){
+        //if (ptr!=strlen(re)-1 && re[ptr]==MINUS_RANGE && from==to){
+        if (ptr!=strlen(re)-1 && re[ptr]==MINUS_RANGE && from==to && re[ptr+1] != CLOSE_SBRACKET){
             ptr++;
 		}else{
 			if (from>to)

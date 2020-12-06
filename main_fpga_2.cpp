@@ -315,7 +315,7 @@ list<prefix_DFA*>* compile_single_to_lis(char* re){
         double p_match = decompose(re, R_pre, R_post, threshold);
         if(p_match > T_MATCH && strcmp(re, R_pre) != 0){
             //todo 尝试提取规则其他部分
-            printf("bad R_pre (later try middle extract):%s. \n", R_pre);
+            printf("bad R_pre (later try middle extract):%s\n", R_pre);
             return nullptr;
         }
         /*与分解|时产生多个prefix和postfix兼容。*/
@@ -434,9 +434,10 @@ list<prefix_DFA*> *compile(list<char*> *regex_list){
     FILE* file_decompose_rules = fopen("../ruleset/snort_decompose.re", "w");
     for(auto &it: *regex_list){
         printf("processing %d/%d re:%s\n", ++cnt, size, it);
+        /*first extract prefix from the beginning*/
         list<prefix_DFA*> *prefixDfa_lis = compile_single_to_lis(it);
+        /*try extract simplest re part as prefix*/
         if(!g_if_contain_dotstar || prefixDfa_lis == nullptr || prefixDfa_lis->empty()){
-            //try extract simplest re part as prefix
             list<prefix_DFA*> *tem = try_compile_single_mid(it, true);
             if(tem != nullptr){
                 if(prefixDfa_lis == nullptr){
@@ -450,8 +451,8 @@ list<prefix_DFA*> *compile(list<char*> *regex_list){
             }
         }
 
+        /*try extract avalaible re part () as prefix*/
         if(prefixDfa_lis == nullptr || prefixDfa_lis->empty()) {
-            //try extract avalaible re part as prefix
             prefixDfa_lis = try_compile_single_mid(it);
             //printf("middle extract re:%s\n", it);
         }

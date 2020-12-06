@@ -120,6 +120,7 @@ bool ComponentSequence::decompose(double cur_pmatch, int &threshold, std::bitset
                 if(typeid(*it) == typeid(ComponentClass)) strcat(R_post, it->get_re_part());
             }
             else if(res){
+                pos--;
                 strcat(R_post, it->get_re_part());
             }
             if(cur_pmatch <= 1) cur_pmatch = cur_pmatch * it->p_match();
@@ -309,4 +310,27 @@ void ComponentSequence::extract_simplest(char *R_pre, char *R_mid, char *R_post)
         else if(i <= last_position) strcat(R_mid, children[i]->get_re_part());
         else strcat(R_post, children[i]->get_re_part());
     }
+}
+
+void ComponentSequence::extract_non_one_repeat(char *R_pre, char *R_mid, char *R_post) {
+    if(children.size() == 1) return;
+    auto* compRep1 = (ComponentRepeat *) children[0];
+    auto* compClass1 = (ComponentClass *) compRep1->sub_comp;
+
+    if(typeid(*children[1]) == typeid(ComponentClass)){
+        auto* compClass = (ComponentClass *) children[1];
+        int cut = ceil(log(PMATCH_THRESHOLD/compClass->p_match()) / log(compClass1->p_match()));
+        compRep1->save_value();
+        compRep1->m_min -= cut;
+        if(compRep1->m_max != _INFINITY) compRep1->m_max -= cut;
+        strcpy(R_pre, compRep1->get_re_part());
+
+        compRep1->recover_value();
+        compRep1->m_min = compRep1->m_max = cut;
+        strcat(R_mid, compRep1->get_re_part());
+        strcat(R_mid, compClass->get_re_part());
+
+        for(int i=2; i<children.size(); i++) strcat(R_post, children[i]->get_re_part());
+    }
+    else return ;
 }
