@@ -65,6 +65,7 @@
 
 #define ONLY_NEW_PATHS 1
 #define MATCH_ONCE //dave add: one pattern only report the first match (for prefix_DFA)
+#define MAX_PKT_NUM 100000
 
 struct match_statics_{
     unsigned int char_num;
@@ -76,6 +77,11 @@ struct match_statics_{
     unsigned int prefix_match_times;
 };
 typedef match_statics_ match_statics;
+
+typedef struct{
+    int len;
+    char* content;
+} Packet;
 
 class trace{
 	
@@ -119,8 +125,18 @@ public:
 	void traverse(prefix_DFA* prefixDfa, match_statics *statics, FILE *stream=stdout);
     match_statics traverse(list<prefix_DFA *> *prefixDfa_list, FILE *stream=stdout);
     void traverse_multiple(list<prefix_DFA *> *prefixDfa_list, char* file_path, FILE *stream=stdout);
-
     bool pre_match(prefix_DFA *prefixDfa, match_statics* statics, FILE *stream);
+
+    /*dave add: traverse packet units*/
+    static int read_pcap(char * filename);
+
+    static void traverse_multiple_pcap(list<prefix_DFA *> *prefixDfa_list, char* file_path);
+    static match_statics traverse_pcap(list<prefix_DFA *> *prefixDfa_list, char* fname);
+    static match_statics traverse(list<prefix_DFA *> *prefixDfa_list, int length, char* pkt);
+    static void traverse(prefix_DFA* prefixDfa, match_statics *statics, int length, char* pkt);
+    static bool pre_match(prefix_DFA *prefixDfa, match_statics* statics, int length, const char* pkt, int offset);
+    static void get_prefix_matches(list<prefix_DFA *> *prefixDfa_list, char* pcap_fname, char* record_fname);
+    static void get_prefix_matches_core(list<prefix_DFA *> *prefixDfa_list, FILE* fp, const char *pkt, int length);
 
 	/* traverses the given ecdfa and prints statistics to stream */ 
 	void traverse(EgCmpDfa *ecdfa, FILE *stream=stdout);

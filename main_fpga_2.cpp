@@ -265,7 +265,7 @@ float bram_compatible(char *re, Fb_DFA* &fbdfa, DFA* &ref_dfa){
     return ratio;
 }
 
-#define T_MATCH 0.0001
+#define T_MATCH 0.00002 //连续匹配两个字符左右的概率
 #define PREFIX_DFA_STATES_THRESHOLD 10000
 
 prefix_DFA* compile_prefixDFA(char* R_post){

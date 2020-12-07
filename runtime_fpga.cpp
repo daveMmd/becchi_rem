@@ -12,6 +12,7 @@
 #include <boost/archive/text_iarchive.hpp>
 #include <boost/serialization/vector.hpp> //序列化STL容器要导入
 #include <fstream>
+#include "parse_pcap.h"
 
 using namespace std;
 #define MAX_CHARS_PER_LINE 5000
@@ -81,18 +82,6 @@ void load_prefixDfas(){
 
 int prefix_DFA::gid = 0;
 
-void test_using_software(){
-    list<prefix_DFA*> lis_prefixdfa;
-    lis_prefixdfa.insert(lis_prefixdfa.begin(), vec_prefixdfa.begin(), vec_prefixdfa.end());
-
-    if (trace_fname){
-        printf("simulating trace traverse, trace file:%s\n", trace_fname);
-        auto tr=trace(trace_fname);
-        tr.traverse(&lis_prefixdfa);
-        //delete tr;
-    }
-}
-
 /*note:一个报文，多个prefix dfas
  *
  * */
@@ -159,8 +148,10 @@ void load_fpga_stt(){
     printf("one copy of stt require need_unit_num:%d\n", need_unit_num);
 
     int copy_num;
-    if(UNIT_NUMBER % need_unit_num == 0) copy_num = UNIT_NUMBER / need_unit_num;
-    else copy_num = UNIT_NUMBER / need_unit_num + 1;
+    //if(UNIT_NUMBER % need_unit_num == 0) copy_num = UNIT_NUMBER / need_unit_num;
+    //else copy_num = UNIT_NUMBER / need_unit_num + 1;
+    copy_num = UNIT_NUMBER / need_unit_num;
+
     printf("maximally contain copy num:%d\n", copy_num);
 
     for(int i = 0; i < stt_num; i++)
@@ -193,6 +184,36 @@ void loop_send_packages(){
     //todo
 }
 
+void test_using_software(){
+    list<prefix_DFA*> lis_prefixdfa;
+    lis_prefixdfa.insert(lis_prefixdfa.begin(), vec_prefixdfa.begin(), vec_prefixdfa.end());
+
+    if (trace_fname){
+        printf("simulating trace traverse, trace file:%s\n", trace_fname);
+        trace::traverse_pcap(&lis_prefixdfa, trace_fname);
+
+        /*int pkt_num = read_pcap(trace_fname);
+        printf("pkt num:%d\n", pkt_num);
+        for(int i=0; i<pkt_num; i++){
+            printf("traversing %d/%d pkt...\n", i, pkt_num);
+            trace::traverse(&lis_prefixdfa, pkts[i]->len, pkts[i]->content);
+        }*/
+        //auto tr=trace(trace_fname);
+        //tr.traverse(&lis_prefixdfa);
+    }
+}
+
+void verify_prefix_matches(){
+    list<prefix_DFA*> lis_prefixdfa;
+    lis_prefixdfa.insert(lis_prefixdfa.begin(), vec_prefixdfa.begin(), vec_prefixdfa.end());
+
+    if (trace_fname){
+        printf("verifying prefix matches using trace file:%s\n", trace_fname);
+        trace::get_prefix_matches(&lis_prefixdfa, trace_fname, "prefixMatches.txt");
+        //delete tr;
+    }
+}
+
 int main(int argc, char **argv){
 
     //config
@@ -205,7 +226,9 @@ int main(int argc, char **argv){
     load_mapping();
     load_prefixDfas();
     //test the correctness of loading databases
-    test_using_software();
+    //test_using_software();
+
+    verify_prefix_matches();
     //exit(0);
 
     /*load front-end DFAs's STT into FPGA*/

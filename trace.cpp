@@ -45,8 +45,11 @@
 #include <set>
 #include <iterator>
 #include <iostream>
+#include "parse_pcap.h"
 
 using namespace std;
+
+Packet **pkts = nullptr;
 
 trace::trace(char *filename){
 	tracefile=NULL;
@@ -1366,4 +1369,363 @@ void trace::traverse_multiple(list<prefix_DFA *> *prefixDfa_list, char* file_pat
     printf("total_active_states_num: %u\n", total_active_states_num);
     printf("total_char_num: %u\n", total_char_num);
     printf("average active states num: %llf\n", total_active_states_num*1.0/total_char_num);
+}
+
+match_statics trace::traverse(list<prefix_DFA *> *prefixDfa_list, int length, char* pkt) {
+
+    match_statics statics;
+    memset(&statics, 0, sizeof(statics));
+
+    statics.char_num = length;
+    statics.active_state_num_on_character = (unsigned int*) malloc(sizeof(unsigned int) * (length + 5));
+    memset(statics.active_state_num_on_character, 0, sizeof(unsigned int) * (length+5));
+
+    int tem_cnt = 0;
+    unsigned int prefix_matching_times = 0;
+    uint32_t total_states = 0;
+    list<pair<pair<uint32_t, uint32_t>, prefix_DFA*>> lis_res;
+    for(auto &it: *prefixDfa_list){
+        //printf("traversing %d/%d prefixDfa\n", ++tem_cnt, prefixDfa_list->size());
+        traverse(it, &statics, length, pkt);
+        unsigned int single_match_times = statics.prefix_match_times - prefix_matching_times;
+        uint32_t single_total_states = statics.total_active_state_num - total_states;
+        //printf("matching prefix times:%u\n", single_match_times);
+        //printf("total states:%u\n", single_total_states);
+        prefix_matching_times = statics.prefix_match_times;
+        total_states = statics.total_active_state_num;
+
+        //used to sort show
+        pair<pair<uint32_t, uint32_t>, prefix_DFA*> pair = make_pair(make_pair(single_total_states, single_match_times), it);
+        lis_res.push_back(pair);
+    }
+    lis_res.sort(mycomp);
+    for(auto& it: lis_res){
+        if(it.first.first == 0) continue; //不输出未匹配re
+        printf("complete re:%s\n", it.second->complete_re);
+        printf("prefix re:%s\n", it.second->re);
+        printf("single_total_states:%u, single_matching_times:%u\n", it.first.first, it.first.second);
+    }
+
+    //print statics
+    unsigned int max_states_num = 0;
+    for(int i=0; i<length; i++) {
+        //statics.total_active_state_num += statics.active_state_num_on_character[i];
+        max_states_num = max(max_states_num, statics.active_state_num_on_character[i]);
+    }
+    statics.average_active_state_num = statics.total_active_state_num * 1.0 / length;
+    printf("#states:");
+    cout << statics.total_active_state_num << endl;
+    printf("#average_states:");
+    cout << statics.average_active_state_num << endl;
+    printf("#max_states:");
+    cout << max_states_num << endl;
+    printf("\n");
+
+    statics.max_states_num = max_states_num;
+    free(statics.active_state_num_on_character);
+    return statics;
+}
+
+void trace::traverse(prefix_DFA *prefixDfa, match_statics *statics, int length, char *pkt) {
+    prefixDfa->init();
+
+    state_t state=0;
+    int offset=0;
+    char c=pkt[offset];
+    DFA* dfa = prefixDfa->prefix_dfa;
+    list<prefix_DFA*> active_prefixDfas;
+    list<state_t> active_states;
+
+    //while(c!=EOF){
+    while(offset < length){
+        list<prefix_DFA*> add_post_dfas;
+        int add_cnt = 0;
+
+        state=dfa->get_next_state(state,(unsigned char)c);
+        if (!dfa->accepts(state)->empty()){
+            statics->prefix_match_times++;
+            //judge if has pre section, and try match first
+            if(pre_match(prefixDfa, statics, length, pkt, offset)){
+#ifdef MATCH_ONCE
+                //only match once. here match occurs
+                if(prefixDfa->next_node == nullptr) return;
+#endif
+                //activate post dfa (next char)
+                prefix_DFA* candidate = prefixDfa->get_post_dfa();
+                if(candidate != nullptr) {
+                    add_post_dfas.push_back(candidate);
+                    add_cnt++;
+                }
+            }
+        }
+
+        auto it_prefixdfa = active_prefixDfas.begin();
+        for(auto it_state = active_states.begin(); it_state != active_states.end(); it_state++){
+            //clear silent prefix_dfa
+            if((*it_prefixdfa)->is_silent){
+                it_state = active_states.erase(it_state);
+                it_state--;
+                it_prefixdfa = active_prefixDfas.erase(it_prefixdfa);
+                it_prefixdfa--;
+            }
+
+            //calculate CPU overhead here
+            statics->active_state_num_on_character[offset]++;
+            statics->total_active_state_num++;
+
+            DFA* iter_dfa = (*it_prefixdfa)->prefix_dfa;
+            *it_state = iter_dfa->get_next_state(*it_state, (unsigned char)c);
+            if(!iter_dfa->accepts(*it_state)->empty()){
+#ifdef MATCH_ONCE
+                //only match once. here match occurs
+                if((*it_prefixdfa)->next_node == nullptr) return;
+#endif
+                //activate post dfa (next char)
+                prefix_DFA* candidate = (*it_prefixdfa)->get_post_dfa();
+                if(candidate != nullptr) {
+                    add_post_dfas.push_back(candidate);
+                    add_cnt++;
+                }
+            }
+            //clear dead state & dead prefixdfa
+            if(*it_state == iter_dfa->dead_state){
+                it_state = active_states.erase(it_state);
+                it_state--;
+                it_prefixdfa = active_prefixDfas.erase(it_prefixdfa);
+                it_prefixdfa--;
+            }
+            //increment dfa iterator
+            it_prefixdfa++;
+        }
+
+        active_prefixDfas.insert(active_prefixDfas.end(), add_post_dfas.begin(), add_post_dfas.end());
+        active_states.insert(active_states.end(), add_cnt, 0);
+        offset++;
+        c=pkt[offset];
+    }
+}
+
+bool trace::pre_match(prefix_DFA *prefixDfa, match_statics *statics, int length, const char *pkt, int offset) {
+    //no pre re part
+    if(prefixDfa->parent_node == nullptr) return true;
+
+    int pos_origin = offset;
+
+    list<prefix_DFA*> active_prefixDfas;
+    list<state_t> active_states;
+    active_prefixDfas.push_back(prefixDfa->parent_node);
+    active_states.push_back(0);
+
+    //res = fseek(tracefile, -prefixDfa->depth-1, SEEK_CUR);
+    offset -= prefixDfa->depth;
+
+    while(offset >= 0){
+        char c = pkt[offset];
+        list<prefix_DFA*> add_post_dfas;
+        int add_cnt = 0;
+
+        auto it_prefixdfa = active_prefixDfas.begin();
+        for(auto it_state = active_states.begin(); it_state != active_states.end(); it_state++){
+            //clear silent prefix_dfa
+            if((*it_prefixdfa)->is_silent){
+                it_state = active_states.erase(it_state);
+                it_state--;
+                it_prefixdfa = active_prefixDfas.erase(it_prefixdfa);
+                it_prefixdfa--;
+            }
+
+            //calculate CPU overhead here
+            statics->active_state_num_on_character[offset]++;
+            statics->total_active_state_num++;
+
+            DFA* iter_dfa = (*it_prefixdfa)->prefix_dfa;
+            *it_state = iter_dfa->get_next_state(*it_state, (unsigned char)c);
+            if(!iter_dfa->accepts(*it_state)->empty()){
+                //only match once. here match occurs
+                if((*it_prefixdfa)->next_node == nullptr)
+                {
+                    return true;
+                }
+                //activate post dfa (next char)
+                prefix_DFA* candidate = (*it_prefixdfa)->get_post_dfa();
+                if(candidate != nullptr) {
+                    add_post_dfas.push_back(candidate);
+                    add_cnt++;
+                }
+            }
+            //clear dead state & dead prefixdfa
+            if(*it_state == iter_dfa->dead_state){
+                it_state = active_states.erase(it_state);
+                it_state--;
+                it_prefixdfa = active_prefixDfas.erase(it_prefixdfa);
+                it_prefixdfa--;
+            }
+            //increment dfa iterator
+            it_prefixdfa++;
+        }
+
+        active_prefixDfas.insert(active_prefixDfas.end(), add_post_dfas.begin(), add_post_dfas.end());
+        active_states.insert(active_states.end(), add_cnt, 0);
+
+        if(active_prefixDfas.empty()) break;
+        //if((res=fseek(tracefile, -2, SEEK_CUR)) != 0) break;
+        offset--;
+    }
+
+    return false;
+}
+
+match_statics trace::traverse_pcap(list<prefix_DFA *> *prefixDfa_list, char *fname) {
+
+    match_statics statics;
+    statics.max_states_num = 0;
+    statics.prefix_match_times = 0;
+    statics.char_num = 0;
+    statics.total_active_state_num = 0;
+
+    int pkt_num = read_pcap(fname);
+    int i = 0;
+
+    for(int i=0; i<pkt_num; i++){
+        printf("processing %d/%d pkt...\n", i, pkt_num);
+        match_statics statics_i = traverse(prefixDfa_list, pkts[i]->len, pkts[i]->content);
+        statics.max_states_num = max(statics.max_states_num, statics_i.max_states_num);
+        statics.total_active_state_num += statics_i.total_active_state_num;
+        statics.char_num += statics_i.char_num;
+        statics.prefix_match_times += statics_i.prefix_match_times;
+    }
+    printf("total_prefix_match_times: %u\n", statics.prefix_match_times);
+    printf("max_states_num: %u\n", statics.max_states_num);
+    printf("total_active_states_num: %u\n", statics.total_active_state_num);
+    printf("total_char_num: %u\n", statics.char_num);
+    printf("average active states num: %llf\n", statics.total_active_state_num * 1.0 / statics.char_num);
+
+    return statics;
+}
+
+int trace::read_pcap(char * filename){
+    struct pcap_pkthdr pkt_header;
+    FILE* fp = fopen(filename, "r");
+    if(fp == NULL){
+        fprintf(stderr, "pcap file null!\n");
+        exit(-1);
+    }
+
+    if(pkts){
+        int i=0;
+        while(pkts[i]){
+            free(pkts[i]);
+            i++;
+        }
+        free(pkts);
+    }
+
+    pkts = (Packet **) malloc(sizeof(Packet *) * MAX_PKT_NUM);
+    memset(pkts, 0, sizeof(Packet *) * MAX_PKT_NUM);
+
+    int pkt_offset = 24; //pcap文件头结构 24个字节
+    int pkt_num = 0;
+
+    while (fseek(fp, pkt_offset, SEEK_SET) == 0) //遍历数据包
+    {
+        //pcap_pkt_header 16 byte
+        memset(&pkt_header, 0, sizeof(struct pcap_pkthdr));
+        if (fread(&pkt_header, 16, 1, fp) != 1) //读pcap数据包头结构
+        {
+            //printf("\nread end of pcap file\n");
+            break;
+        }
+
+        char* pkt_content = (char*)malloc(pkt_header.caplen);
+        fread(pkt_content, pkt_header.caplen, 1, fp);
+
+        pkt_offset += 16 + pkt_header.caplen;   //下一个数据包的偏移值
+        //printf("pkt lenth:%u\n", ptk_header.caplen);
+
+        Packet *pkt = (Packet *) malloc(sizeof(Packet));
+        pkt->len = pkt_header.caplen;
+        pkt->content = pkt_content;
+
+        pkts[pkt_num] = pkt;
+        pkt_num++;
+        if(pkt_num >= MAX_PKT_NUM) {
+            fprintf(stderr, "single pcap contain more than %d pkts!\n", MAX_PKT_NUM);
+            break;
+        }
+    } // end while
+
+    fclose(fp);
+    return pkt_num;
+}
+
+void trace::traverse_multiple_pcap(list<prefix_DFA *> *prefixDfa_list, char *file_path) {
+    unsigned int max_states_num = 0;
+    unsigned int total_active_states_num = 0;
+    unsigned int total_char_num = 0;
+    unsigned int total_prefix_match_times = 0;
+
+    struct dirent *entry;
+    DIR *dp = nullptr;
+    dp = opendir(file_path);
+    if(dp == nullptr) fatal("failed to open dir!\n");
+    while((entry = readdir(dp))){
+        if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        char filename[1000];
+        sprintf(filename, "%s/%s", file_path, entry->d_name);
+        //set_trace(filename);
+        match_statics statics = traverse_pcap(prefixDfa_list, filename);
+        max_states_num = max(max_states_num, statics.max_states_num);
+        total_active_states_num += statics.total_active_state_num;
+        total_char_num += statics.char_num;
+        total_prefix_match_times += statics.prefix_match_times;
+    }
+    printf("total_prefix_match_times: %u\n", total_prefix_match_times);
+    printf("max_states_num: %u\n", max_states_num);
+    printf("total_active_states_num: %u\n", total_active_states_num);
+    printf("total_char_num: %u\n", total_char_num);
+    printf("average active states num: %llf\n", total_active_states_num*1.0/total_char_num);
+}
+
+void trace::get_prefix_matches_core(list<prefix_DFA *> *prefixDfa_list, FILE* file, const char *pkt, int length) {
+
+    int offset=0;
+    unsigned char c = pkt[offset];
+    list<DFA*> DFAs;
+    list<state_t> current_states;
+    for(auto &it: *prefixDfa_list){
+        DFAs.push_back(it->prefix_dfa);
+        current_states.push_back(0);
+    }
+
+    //while(c!=EOF){
+    while(offset < length){
+        auto it_state = current_states.begin();
+        int id = 0; //标识第几个prefix DFA
+        for(auto dfa : DFAs){
+            state_t state = *it_state;
+            *it_state = dfa->get_next_state(state, c);
+
+            if(!dfa->accepts(*it_state)->empty()){
+                fprintf(file, "offset:%d id:%\n", offset, id);
+            }
+
+            it_state++;
+            id++;
+        }
+
+        offset++;
+        c = pkt[offset];
+    }
+}
+
+void trace::get_prefix_matches(list<prefix_DFA *> *prefixDfa_list, char* pcap_fname, char *record_fname) {
+    FILE* file = fopen(record_fname, "w");
+    int pkt_num = read_pcap(pcap_fname);
+    for(int i=0; i<pkt_num; i++){
+        printf("verifying %d/%d pkt ...\n", i, pkt_num);
+        fprintf(file, "verifying %d/%d pkt ...\n", i, pkt_num);
+        get_prefix_matches_core(prefixDfa_list, file, pkts[i]->content, pkts[i]->len);
+    }
+
+    fclose(file);
 }
