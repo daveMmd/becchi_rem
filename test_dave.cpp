@@ -4,6 +4,8 @@
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
 #include "parser.h"
+#include "Fb_DFA.h"
+#include "./component_tree/util.h"
 
 int DEBUG = 0;
 int VERBOSE = 0;
@@ -67,15 +69,50 @@ void test_serialization(){
 int main(int argc, char** argv) {
     char* rulefile;
     if(argc > 1) rulefile = argv[1];
-    FILE* f = fopen(rulefile, "r");
 
     auto parser = regex_parser(false, false);
+#ifdef COMPILE_INTO_ONE_NFA
+    FILE* f = fopen(rulefile, "r");
     NFA* nfa = parser.parse(f);
-
     DFA* dfa = nfa->nfa2dfa();
 
     dfa->minimize();
 
-    printf("nfa size: %d\n, dfa size: %d\n", nfa->size(), dfa->size());
+    Fb_DFA* fb_dfa = new Fb_DFA(dfa);
+    Fb_DFA* minimise_fb_dfa = fb_dfa->minimise2();
+
+    FILE *fp = fopen("./dfa.dot", "w");
+    dfa->to_dot(fp, "dfa");
+    fclose(fp);
+    minimise_fb_dfa->to_dot("./fb_dfa.dot", "minimise_fb_dfa");
+
+    printf("nfa size: %d\ndfa size: %d\n", nfa->size(), dfa->size());
+    printf("fb_dfa size: %d\nminimise fb_dfa size: %d\n", fb_dfa->size(), minimise_fb_dfa->size());
+#else
+    list<char *>* regex_list = read_regexset(rulefile);
+    Fb_DFA* final_fbdfa = nullptr;
+    for(auto &re: *regex_list){
+        NFA* nfa = parser.parse_from_regex(re);
+        DFA* dfa = nfa->nfa2dfa();
+        dfa->minimize();
+        auto* fb_dfa = new Fb_DFA(dfa);
+        Fb_DFA* minimise_fb_dfa = fb_dfa->minimise2();
+        delete fb_dfa;
+        if(final_fbdfa) {
+            Fb_DFA* tem_fbdfa = final_fbdfa->converge(minimise_fb_dfa);
+            delete final_fbdfa;
+            delete minimise_fb_dfa;
+            final_fbdfa = tem_fbdfa;
+        }
+        else{
+            final_fbdfa = minimise_fb_dfa;
+        }
+    }
+
+    Fb_DFA* final_minimise_fbdfa = final_fbdfa->minimise2();
+    printf("final_fbdfa size: %d\nminimise final_fbdfa size: %d\n", final_fbdfa->size(), final_minimise_fbdfa->size());
+#endif
+
+
     return 0;
 }
