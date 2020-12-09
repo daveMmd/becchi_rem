@@ -313,7 +313,8 @@ list<prefix_DFA*>* compile_single_to_lis(char* re){
     int threshold = DEAFAULT_THRESHOLD;
     while(1){
         double p_match = decompose(re, R_pre, R_post, threshold);
-        if(p_match > T_MATCH && strcmp(re, R_pre) != 0){
+        //if(p_match > T_MATCH && strcmp(re, R_pre) != 0){
+        if(p_match > T_MATCH){ //舍弃掉过短规则（即匹配概率过高规则）
             //todo 尝试提取规则其他部分
             printf("bad R_pre (later try middle extract):%s\n", R_pre);
             return nullptr;

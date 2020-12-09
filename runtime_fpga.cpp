@@ -191,15 +191,6 @@ void test_using_software(){
     if (trace_fname){
         printf("simulating trace traverse, trace file:%s\n", trace_fname);
         trace::traverse_pcap(&lis_prefixdfa, trace_fname);
-
-        /*int pkt_num = read_pcap(trace_fname);
-        printf("pkt num:%d\n", pkt_num);
-        for(int i=0; i<pkt_num; i++){
-            printf("traversing %d/%d pkt...\n", i, pkt_num);
-            trace::traverse(&lis_prefixdfa, pkts[i]->len, pkts[i]->content);
-        }*/
-        //auto tr=trace(trace_fname);
-        //tr.traverse(&lis_prefixdfa);
     }
 }
 
@@ -226,9 +217,9 @@ int main(int argc, char **argv){
     load_mapping();
     load_prefixDfas();
     //test the correctness of loading databases
-    //test_using_software();
+    test_using_software();
 
-    verify_prefix_matches();
+    //verify_prefix_matches();
     //exit(0);
 
     /*load front-end DFAs's STT into FPGA*/

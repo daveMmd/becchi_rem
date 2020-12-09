@@ -1,0 +1,19 @@
+#####pmatch = 10^-12#####
+
+
+#####pmatch = 0#####
+complete re:^[^\r\n]+#[^\x22\r\n]{2049}
+prefix re:^[^\r\n]+#[^\x22\r\n]{5}
+single_total_states:16189, single_matching_times:17
+complete re:\x2Ephp\x3F.{0,300}\x3Dhttps\x3A\x2F[^\x3F\x26]+\x3F
+prefix re:\x2Ephp\x3F
+single_total_states:211257, single_matching_times:1
+complete re:\x2Ephp\x3F.{0,300}\x3Dftp\x3A\x2F[^\x3F\x26]+\x3F
+prefix re:\x2Ephp\x3F
+single_total_states:211257, single_matching_times:1
+complete re:[0-9A-Z]{240,}
+prefix re:[0-9A-Z]{54}
+single_total_states:233642, single_matching_times:10474
+#states:696636
+#average_states:2.42322
+#max_states:182

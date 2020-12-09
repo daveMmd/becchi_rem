@@ -1385,18 +1385,18 @@ match_statics trace::traverse(list<prefix_DFA *> *prefixDfa_list, int length, ch
     uint32_t total_states = 0;
     list<pair<pair<uint32_t, uint32_t>, prefix_DFA*>> lis_res;
     for(auto &it: *prefixDfa_list){
-        //printf("traversing %d/%d prefixDfa\n", ++tem_cnt, prefixDfa_list->size());
         traverse(it, &statics, length, pkt);
         unsigned int single_match_times = statics.prefix_match_times - prefix_matching_times;
         uint32_t single_total_states = statics.total_active_state_num - total_states;
-        //printf("matching prefix times:%u\n", single_match_times);
-        //printf("total states:%u\n", single_total_states);
         prefix_matching_times = statics.prefix_match_times;
         total_states = statics.total_active_state_num;
 
         //used to sort show
         pair<pair<uint32_t, uint32_t>, prefix_DFA*> pair = make_pair(make_pair(single_total_states, single_match_times), it);
         lis_res.push_back(pair);
+
+        it->prefix_match_times += single_match_times;
+        it->cpu_overhead += single_total_states;
     }
     lis_res.sort(mycomp);
     for(auto& it: lis_res){
@@ -1444,6 +1444,9 @@ void trace::traverse(prefix_DFA *prefixDfa, match_statics *statics, int length, 
         state=dfa->get_next_state(state,(unsigned char)c);
         if (!dfa->accepts(state)->empty()){
             statics->prefix_match_times++;
+            //debug which prefix match
+            //printf("complete re:%s \t, prefix re:%s\n", prefixDfa->complete_re, prefixDfa->re);
+
             //judge if has pre section, and try match first
             if(pre_match(prefixDfa, statics, length, pkt, offset)){
 #ifdef MATCH_ONCE
@@ -1461,6 +1464,7 @@ void trace::traverse(prefix_DFA *prefixDfa, match_statics *statics, int length, 
 
         auto it_prefixdfa = active_prefixDfas.begin();
         for(auto it_state = active_states.begin(); it_state != active_states.end(); it_state++){
+#ifdef ACTIVATE_ONCE_DOTSTAR
             //clear silent prefix_dfa
             if((*it_prefixdfa)->is_silent){
                 it_state = active_states.erase(it_state);
@@ -1468,6 +1472,7 @@ void trace::traverse(prefix_DFA *prefixDfa, match_statics *statics, int length, 
                 it_prefixdfa = active_prefixDfas.erase(it_prefixdfa);
                 it_prefixdfa--;
             }
+#endif
 
             //calculate CPU overhead here
             statics->active_state_num_on_character[offset]++;
@@ -1526,6 +1531,7 @@ bool trace::pre_match(prefix_DFA *prefixDfa, match_statics *statics, int length,
 
         auto it_prefixdfa = active_prefixDfas.begin();
         for(auto it_state = active_states.begin(); it_state != active_states.end(); it_state++){
+#ifdef ACTIVATE_ONCE_DOTSTAR
             //clear silent prefix_dfa
             if((*it_prefixdfa)->is_silent){
                 it_state = active_states.erase(it_state);
@@ -1533,6 +1539,7 @@ bool trace::pre_match(prefix_DFA *prefixDfa, match_statics *statics, int length,
                 it_prefixdfa = active_prefixDfas.erase(it_prefixdfa);
                 it_prefixdfa--;
             }
+#endif
 
             //calculate CPU overhead here
             statics->active_state_num_on_character[offset]++;
@@ -1541,7 +1548,7 @@ bool trace::pre_match(prefix_DFA *prefixDfa, match_statics *statics, int length,
             DFA* iter_dfa = (*it_prefixdfa)->prefix_dfa;
             *it_state = iter_dfa->get_next_state(*it_state, (unsigned char)c);
             if(!iter_dfa->accepts(*it_state)->empty()){
-                //only match once. here match occurs
+                //pre re part only match once. here match occurs
                 if((*it_prefixdfa)->next_node == nullptr)
                 {
                     return true;
@@ -1574,6 +1581,14 @@ bool trace::pre_match(prefix_DFA *prefixDfa, match_statics *statics, int length,
 
     return false;
 }
+//bool prefix_match_times_cmp(prefix_DFA* pd1, prefix_DFA* pd2){
+bool prefix_match_times_cmp(  prefix_DFA* const &pd1, prefix_DFA* const &pd2){
+    return pd1->prefix_match_times > pd2->prefix_match_times;
+}
+
+bool cpu_overhead_cmp(  prefix_DFA* const &pd1, prefix_DFA* const &pd2){
+    return pd1->cpu_overhead > pd2->cpu_overhead;
+}
 
 match_statics trace::traverse_pcap(list<prefix_DFA *> *prefixDfa_list, char *fname) {
 
@@ -1585,6 +1600,11 @@ match_statics trace::traverse_pcap(list<prefix_DFA *> *prefixDfa_list, char *fna
 
     int pkt_num = read_pcap(fname);
     int i = 0;
+    //init prefix_match times
+    for(auto &it: *prefixDfa_list){
+        it->prefix_match_times = 0;
+        it->cpu_overhead = 0;
+    }
 
     for(int i=0; i<pkt_num; i++){
         printf("processing %d/%d pkt...\n", i, pkt_num);
@@ -1594,6 +1614,19 @@ match_statics trace::traverse_pcap(list<prefix_DFA *> *prefixDfa_list, char *fna
         statics.char_num += statics_i.char_num;
         statics.prefix_match_times += statics_i.prefix_match_times;
     }
+    //debug show prefix match times of each prefix dfa
+    prefixDfa_list->sort(prefix_match_times_cmp);
+    for(auto &it: *prefixDfa_list){
+        if(it->prefix_match_times == 0) continue;
+        printf("prefix match times: %u, prefix_re:%s , complete_re: %s\n", it->prefix_match_times, it->re,  it->complete_re);
+    }
+    //debug show cpu over head per prefix
+    prefixDfa_list->sort(cpu_overhead_cmp);
+    for(auto &it: *prefixDfa_list){
+        if(it->cpu_overhead == 0) continue;
+        printf("cpu overhead (states): %u, prefix_re:%s , complete_re: %s\n", it->cpu_overhead, it->re,  it->complete_re);
+    }
+
     printf("total_prefix_match_times: %u\n", statics.prefix_match_times);
     printf("max_states_num: %u\n", statics.max_states_num);
     printf("total_active_states_num: %u\n", statics.total_active_state_num);
@@ -1706,7 +1739,7 @@ void trace::get_prefix_matches_core(list<prefix_DFA *> *prefixDfa_list, FILE* fi
             *it_state = dfa->get_next_state(state, c);
 
             if(!dfa->accepts(*it_state)->empty()){
-                fprintf(file, "offset:%d id:%\n", offset, id);
+                fprintf(file, "offset:%d id:%d\n", offset, id);
             }
 
             it_state++;

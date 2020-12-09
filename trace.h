@@ -64,7 +64,8 @@
 #define MAX_MEM_REF CSIZE+1+CSIZE/4 //max number of memory references
 
 #define ONLY_NEW_PATHS 1
-#define MATCH_ONCE //dave add: one pattern only report the first match (for prefix_DFA)
+//#define MATCH_ONCE //dave add: one pattern only report the first match (for prefix_DFA)
+//#define ACTIVATE_ONCE_DOTSTAR //控制.*是否只激发一次后续dfa激活
 #define MAX_PKT_NUM 100000
 
 struct match_statics_{

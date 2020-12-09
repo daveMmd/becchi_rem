@@ -62,6 +62,10 @@ public:
     string complete_re_string;
     string re_string;
 
+    //debug use
+    unsigned int prefix_match_times;
+    unsigned int cpu_overhead; //(states activated)
+
     prefix_DFA(){
         complete_re = nullptr;
         depth = 0;
@@ -74,6 +78,9 @@ public:
         prefix_dfa = nullptr;
         next_node = nullptr;
         parent_node = nullptr;
+
+        prefix_match_times = 0;
+        cpu_overhead = 0;
     }
 
     ~prefix_DFA(){
@@ -128,9 +135,11 @@ public:
 
     //when match call to get post dfa
     prefix_DFA* get_post_dfa(){
+#ifdef ACTIVATE_ONCE_DOTSTAR
         if(flag_activate_once) self_silent(); //仅触发一次，因此当前dfa以及当前dfa的父dfa均不必再匹配
         if(flag_activate_once && is_activate) return nullptr;
         is_activate = true;
+#endif
 
         if(next_node == nullptr) return nullptr;
         if(next_node->prefix_dfa == nullptr) return nullptr;
