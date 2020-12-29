@@ -811,3 +811,30 @@ NFA *regex_parser::parse_from_regex(char *re) {
     strcpy(nfa->get_first()->pattern, re);
     return nfa->get_first();
 }
+
+NFA *regex_parser::parse_from_regexlist(list<char *> *regex_list) {
+
+    int i=0;
+    int j=0;
+
+    // NFA
+    NFA *nfa=new NFA();
+    NFA *non_anchored = nfa->add_epsilon(); // for .* RegEx
+    NFA *anchored = nfa->add_epsilon(); // for anchored RegEx (^)
+
+    for(auto &re: *regex_list) parse_re(nfa, re);
+
+    if (m_modifier && (!anchored->get_epsilon()->empty() || !anchored->get_transitions()->empty())){
+        non_anchored->add_transition('\n',anchored);
+        non_anchored->add_transition('\r',anchored);
+    }
+
+    if(non_anchored->get_epsilon()->empty() && non_anchored->get_transitions()->empty()){
+        nfa->get_epsilon()->remove(non_anchored);
+        delete non_anchored;
+    }else{
+        non_anchored->add_any(non_anchored);//初始状态时刻活跃
+    }
+
+    return nfa->get_first();
+}

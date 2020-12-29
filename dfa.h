@@ -106,8 +106,6 @@ protected:
         /*number of states in the DFA*/
         unsigned _size;
 
-        /**/
-        int *is_accept;
         bool flag_mask_table;
 
 		/* state_table[old_state][symbol]=new_state*/
@@ -132,6 +130,9 @@ protected:
 
              
 private:
+
+    /**/
+    //int *is_accept;
 
 	/* number of entry allocated (for dynamic allocation) */
     unsigned int entry_allocated;
@@ -165,6 +166,9 @@ public:
 
 	virtual unsigned int get_m_size();
 
+	/*add by dave: calculate memsize of stt*/
+	uint32_t get_memsize();
+
 	/* sets the number of states in the DFA */
 	void set_size(unsigned int n);
 	
@@ -188,6 +192,12 @@ public:
      * Space complexity: O(c n), size < 4*(5*c*n + 13*n + 3*c) byte
      */
 	void minimize();
+
+	/*
+	 * minimize函数区分不同规则的accept状态，使得状态数增多。重实现，不区分不同规则的accept 状态 -> 另外的方案进行区分哪一条规则得到匹配
+	 * Minimization using Equivalence Theorem
+	 * */
+    DFA* minimize_do_not_dis_accept();
 
 	/* returns the next_state from state on symbol c */
 	state_t get_next_state(state_t state, symbol_t c);

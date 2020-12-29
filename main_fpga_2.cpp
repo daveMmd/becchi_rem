@@ -13,6 +13,7 @@
 #include "parser.h"
 #include "prefix_DFA.h"
 #include "trace.h"
+#include "rcdfa.h"
 
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
@@ -23,6 +24,7 @@
 int VERBOSE;
 int DEBUG;
 int prefix_DFA::gid = 0;
+//uint16_t g_ind_prefixDfa = 0;
 
 /* usage */
 static void usage()
@@ -131,14 +133,14 @@ int cmp(const void* p1, const void* p2){
 
 /*dfa will not change*/
 void init_accept_rules(Fb_DFA* dfa){
-    if(dfa->accept_to_prefix_dfa == nullptr){
-        dfa->accept_to_prefix_dfa = (list<uint16_t >**) malloc(sizeof(list<uint16_t>*) * dfa->_size);
+    if(dfa->accept_list == nullptr){
+        dfa->accept_list = (list<uint16_t >**) malloc(sizeof(list<uint16_t>*) * dfa->_size);
         for(state_t s = 0; s < dfa->_size; s++) {
             if(dfa->is_accept[s]) {
-                dfa->accept_to_prefix_dfa[s] = new list<uint16_t>();
-                dfa->accept_to_prefix_dfa[s]->push_back(dfa->ind_prefixdfa_single);
+                dfa->accept_list[s] = new list<uint16_t>();
+                dfa->accept_list[s]->push_back(dfa->ind_prefixdfa_single);
             }
-            else dfa->accept_to_prefix_dfa[s] = nullptr;
+            else dfa->accept_list[s] = nullptr;
         }
     }
 }
@@ -150,7 +152,7 @@ void init_accept_rules(Fb_DFA* dfa){
  * */
 Fb_DFA** greedy_group(list<Fb_DFA *> *dfa_lis, int& fbdfa_num){
     /*init all dfa accept to prefix list*/
-    for(auto &it: *dfa_lis) init_accept_rules(it);
+    for(auto &it: *dfa_lis) it->init_accept_rules();
 
     /*sort dfa according size*/
     Fb_DFA *tem_lis[10000];
@@ -464,6 +466,7 @@ list<prefix_DFA*> *compile(list<char*> *regex_list){
             continue;
         }
 
+
         for(auto &it_prefixDfa: *prefixDfa_lis) it_prefixDfa->debug(file_debug, it);
         for(auto &it_prefixDfa: *prefixDfa_lis) {
             it_prefixDfa->complete_re = it;
@@ -707,6 +710,132 @@ void clear_redundant(list<char *> *regex_list){
     //printf("regex_list size:%d\n", regex_list->size());
 }
 
+
+void debug_rule_set_character(list<prefix_DFA*> *prefix_dfa_list){
+    int num_state_explosion = 0;
+    int num_dotstar_like = 0;
+    int total_chars = 0;
+    list<char*> re_lis, re_lis_copy;
+    re_lis.clear();
+
+    int rule_cnt = 0;
+    char *re_pre = nullptr;
+
+    for(auto &prefix_dfa : *prefix_dfa_list){
+        char *re = prefix_dfa->complete_re;
+        //可能一条re对应多个prefix dfa
+        if(re_pre != nullptr && strcmp(re, re_pre) == 0) continue;
+        re_pre = re;
+        re_lis.push_back(re);
+        rule_cnt++;
+        if(contain_dotstar(re)) num_dotstar_like++;
+        if(is_explosive(re)) num_state_explosion++;
+        total_chars += char_count(re);
+    }
+    printf("# rules with state explosion: %d\n", num_state_explosion);
+    printf("# rules with .*-like part: %d\n", num_dotstar_like);
+    printf("# average chars per re: %f\n", total_chars * 1.0 / rule_cnt);
+
+    re_lis_copy.resize(re_lis.size());
+    /*write to actual-used.re*/
+    FILE* f = fopen("../res/actual-used.re", "w");
+    for(auto re : re_lis){
+        fprintf(f, "%s\n", re);
+    }
+    fclose(f);
+    printf("writing actual-used.re finished.\n");
+
+    copy(re_lis.begin(), re_lis.end(), re_lis_copy.begin());
+    regex_parser parser(false, false);
+    list<NFA *> *nfa_lis = parser.parse_to_list_from_regexlist(&re_lis);
+    int total_nfa_states = 0;
+    for(auto &it: *nfa_lis) total_nfa_states += it->size();
+    printf("before nfa reduction, nfa state num: %d\n", total_nfa_states);
+    total_nfa_states = 0;
+    for(auto &it: *nfa_lis) {
+        it->reduce();
+        total_nfa_states += it->size();
+    }
+    printf("after nfa reduction, nfa state num: %d\n", total_nfa_states);
+
+    total_nfa_states = 0;
+    int state_cnt = 0;
+    list<char*> tmp_re_lis;
+    tmp_re_lis.clear();
+    for(auto &re: re_lis_copy){
+        NFA* nfa_tmp = parser.parse_from_regex(re);
+        state_cnt += nfa_tmp->size();
+        delete nfa_tmp;
+
+        tmp_re_lis.push_back(re);
+        if(state_cnt > 5000){
+            state_cnt = 0;
+            NFA* nfa = parser.parse_from_regexlist(&tmp_re_lis);
+            printf("before reduction, single nfa state num: %d\n", nfa->size());
+            nfa->remove_epsilon();
+            nfa->reduce();
+            total_nfa_states += nfa->size();
+            printf("after reduction, single nfa state num: %d\n", nfa->size());
+            delete nfa;
+            tmp_re_lis.clear();
+        }
+    }
+
+    if(!tmp_re_lis.empty()){
+        NFA* nfa = parser.parse_from_regexlist(&tmp_re_lis);
+        printf("before reduction, single nfa state num: %d\n", nfa->size());
+        nfa->remove_epsilon();
+        nfa->reduce();
+        total_nfa_states += nfa->size();
+        printf("after reduction, single nfa state num: %d\n", nfa->size());
+        delete nfa;
+    }
+
+    printf("total nfa state num: %d\n", total_nfa_states);
+}
+
+void debug_backend_dfa_size(list<prefix_DFA*> *prefix_dfa_list){
+    uint32_t RMT_size = prefix_dfa_list->size() * (4 + 2) * 2;
+    printf("RMT size: %u\n", RMT_size);
+
+    uint32_t total_dfa_size = 0;
+    //uint32_t real_total_dfa_size = 0;
+    uint32_t total_rcdfa_size = 0;
+    uint32_t real_total_rcdfa_size = 0;
+
+
+    for(auto &prefixDfa : *prefix_dfa_list){
+        prefix_DFA* father_node = prefixDfa;
+        prefix_DFA* child_node = prefixDfa->next_node;
+        //iterating father nodes
+        while(father_node != nullptr){
+            DFA* dfa = father_node->prefix_dfa;
+            father_node = father_node->parent_node;
+            RCDFA rangecoding_dfa(dfa);
+            total_dfa_size += dfa->get_memsize();
+            total_rcdfa_size += rangecoding_dfa.getMemSize();
+            real_total_rcdfa_size += rangecoding_dfa.get_real_mem_size();
+        }
+
+        //iterating child nodes
+        while(child_node != nullptr){
+            DFA* dfa = child_node->prefix_dfa;
+            child_node = child_node->next_node;
+            RCDFA rangecoding_dfa(dfa);
+            total_dfa_size += dfa->get_memsize();
+            total_rcdfa_size += rangecoding_dfa.getMemSize();
+            real_total_rcdfa_size += rangecoding_dfa.get_real_mem_size();
+        }
+    }
+
+    printf("total dfa size (Bytes): %u\n", total_dfa_size);
+    /*state_t of 16bits*/
+    printf("real total dfa size (Bytes): %u\n", total_dfa_size / 2);
+    printf("total rcdfa size (Bytes): %u\n", total_rcdfa_size);
+    printf("real total rcdfa size (Bytes): %u\n", real_total_rcdfa_size);
+
+    printf("CPU memory consumption (KB): %f\n", (real_total_rcdfa_size + RMT_size) / 1024.0);
+}
 /*
  *  MAIN - entry point
  */
@@ -742,7 +871,9 @@ int main(int argc, char **argv){
     printf("compile cost time(generating dfa):%f seconds\n", (end.tv_sec - start.tv_sec) + 0.000001 * (end.tv_usec - start.tv_usec));
 
 #if 1
-    debug_prefix_dfa_size(prefix_dfa_list);
+    //debug_backend_dfa_size(prefix_dfa_list);
+    debug_rule_set_character(prefix_dfa_list);
+    //debug_prefix_dfa_size(prefix_dfa_list);
     //show which re is expensive
     //show_expensive_re(prefix_dfa_list);
 #endif

@@ -17,11 +17,74 @@
 using namespace std;
 #define MAX_CHARS_PER_LINE 5000
 
-char *trace_fname = nullptr;
+//char *trace_fname = nullptr;
 unordered_map<uint32_t, list<uint16_t>*> *mapping_table;
 vector<prefix_DFA*> vec_prefixdfa;
 int DEBUG = 0;
 int VERBOSE = 0;
+
+/* usage */
+static void usage()
+{
+    fprintf(stderr,"argument wrong. usage to do\n");
+    exit(0);
+}
+
+/* configuration */
+static struct conf {
+    char *regex_file;
+    char *trace_file;
+    char *trace_base;
+    bool puredata;
+} config;
+
+/* initialize the configuration */
+void init_conf(){
+    config.regex_file=NULL;
+    config.trace_file=NULL;
+    config.trace_base = nullptr;
+    config.puredata=false;
+}
+
+/* parse the main call parameters */
+static int parse_arguments(int argc, char **argv)
+{
+    int i=1;
+    if (argc < 2) {
+        usage();
+        return 0;
+    }
+    while(i<argc){
+        if(strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0){
+            usage();
+            return 0;
+        }else if(strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--trace") == 0){
+            i++;
+            if(i==argc){
+                fprintf(stderr,"Trace file name missing.\n");
+                return 0;
+            }
+            config.trace_file=argv[i];
+        }
+        else if(strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--tracebase") == 0){
+            i++;
+            if(i==argc){
+                fprintf(stderr,"Trace base missing.\n");
+                return 0;
+            }
+            config.trace_base=argv[i];
+        }
+        else if(strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--pure") == 0){
+            config.puredata = true;
+            //return 0;
+        }
+        else{
+            fprintf(stderr,"Ignoring invalid option %s\n",argv[i]);
+        }
+        i++;
+    }
+    return 1;
+}
 
 void load_mapping(){
     FILE *f = fopen("./mapping.txt", "r");
@@ -188,9 +251,29 @@ void test_using_software(){
     list<prefix_DFA*> lis_prefixdfa;
     lis_prefixdfa.insert(lis_prefixdfa.begin(), vec_prefixdfa.begin(), vec_prefixdfa.end());
 
-    if (trace_fname){
-        printf("simulating trace traverse, trace file:%s\n", trace_fname);
-        trace::traverse_pcap(&lis_prefixdfa, trace_fname);
+    if(config.trace_file){
+        printf("simulating trace traverse, trace file:%s\n", config.trace_file);
+        if(config.puredata){
+            printf("simulating trace traverse, trace file:%s\n", config.trace_file);
+            auto tr=new trace(config.trace_file);
+            tr->traverse(&lis_prefixdfa);
+            delete tr;
+        }
+        else{
+            trace::traverse_pcap(&lis_prefixdfa, config.trace_file);
+        }
+    }
+
+    if(config.trace_base){
+        printf("simulating trace traverse, trace base:%s\n", config.trace_base);
+        if(config.puredata){
+            auto tr=new trace();
+            tr->traverse_multiple(&lis_prefixdfa, config.trace_base);
+            delete tr;
+        }
+        else {
+            trace::traverse_multiple_pcap(&lis_prefixdfa, config.trace_base);
+        }
     }
 }
 
@@ -198,9 +281,9 @@ void verify_prefix_matches(){
     list<prefix_DFA*> lis_prefixdfa;
     lis_prefixdfa.insert(lis_prefixdfa.begin(), vec_prefixdfa.begin(), vec_prefixdfa.end());
 
-    if (trace_fname){
-        printf("verifying prefix matches using trace file:%s\n", trace_fname);
-        trace::get_prefix_matches(&lis_prefixdfa, trace_fname, "prefixMatches.txt");
+    if (config.trace_file){
+        printf("verifying prefix matches using trace file:%s\n", config.trace_file);
+        trace::get_prefix_matches(&lis_prefixdfa, config.trace_file, "prefixMatches.txt");
         //delete tr;
     }
 }
@@ -208,7 +291,8 @@ void verify_prefix_matches(){
 int main(int argc, char **argv){
 
     //config
-    if(argc >= 2) trace_fname = argv[1];
+    init_conf();
+    parse_arguments(argc, argv);
 
     //init
     init_fpga();

@@ -142,6 +142,17 @@ unsigned int RCDFA::get_m_size(){
 	return m_size;
 }
 
+uint32_t RCDFA::get_real_mem_size(){
+    unsigned int sum = 0;
+    // printf("%d %d\n", sizeof(RangeEdgeList), sizeof(RangeEdge));
+    sum = _size * sizeof(RangeEdgeList);
+    for (state_t s=0; s<_size; s++){
+        RangeEdgeList re_list = range_edges_lists[s];
+        sum += re_list.lenght * 4;
+    }
+    return sum;
+}
+
 unsigned int RCDFA::getMemSize() {
 	unsigned int sum = 0;
 	// printf("%d %d\n", sizeof(RangeEdgeList), sizeof(RangeEdge));

@@ -96,6 +96,7 @@ public:
     list<NFA *>* parse_to_list_mp(FILE *file, int * size);
 
     list<NFA *>* parse_to_list_from_regexlist(list<char*> *regex_list);
+    NFA* parse_from_regexlist(list<char*> *regex_list);
 	
 	//parses all the regular expressions containted in file and returns a set of DFAs
 	dfa_set *parse_to_dfa(FILE *file);

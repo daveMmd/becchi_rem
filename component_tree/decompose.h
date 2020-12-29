@@ -35,4 +35,8 @@ void reverse_re(char* re);
 bool is_exactString(char *re);
 
 bool contain_dotstar(char *re);
+
+bool is_explosive(char *re);
+
+int char_count(char *re);
 #endif //BECCHI_REGEX_DECOMPOSE_H

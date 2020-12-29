@@ -29,9 +29,10 @@ Fb_NFA* reverse2nfa(Fb_DFA* dfa){
     return nfa;
 }
 
-Fb_DFA::Fb_DFA(DFA *dfa) {
+Fb_DFA::Fb_DFA(DFA *dfa, uint16_t ind) {
     //init
-    accept_to_prefix_dfa = NULL;
+    ind_re_report = ind;
+    accept_list = nullptr;
     dead_state = NO_STATE;
     cons2state_num = -1;
     smallsate_num = -1;
@@ -65,6 +66,8 @@ Fb_DFA::Fb_DFA(DFA *dfa) {
             state_table[news][c%16] = stt_dfa[s][c] * 17;
         }
     }
+
+    init_accept_rules();
 }
 
 #define MAX_DFA_SIZE_INCREMENT 50
@@ -88,8 +91,11 @@ state_t Fb_DFA::add_state() {
     return state;
 }
 
-Fb_DFA::Fb_DFA() {
-    accept_to_prefix_dfa = nullptr;
+/*@param-ind: fbdfa对应的正则表达式id或者prefix_id
+ * */
+Fb_DFA::Fb_DFA(uint16_t ind) {
+    ind_re_report = ind;
+    accept_list = nullptr;
     dead_state = NO_STATE;
     cons2state_num = -1;
     smallsate_num = -1;
@@ -110,10 +116,10 @@ Fb_DFA::~Fb_DFA() {
     free(is_accept);
     for(int s = 0; s < _size; s++) free(state_table[s]);
     free(state_table);
-    if(accept_to_prefix_dfa != nullptr){
-        for(int s = 0; s < _size; s++) delete accept_to_prefix_dfa[s];
+    if(accept_list != nullptr){
+        for(int s = 0; s < _size; s++) delete accept_list[s];
     }
-    free(accept_to_prefix_dfa);
+    free(accept_list);
 }
 
 void Fb_DFA::add_transition(state_t s, int c, state_t d) {
@@ -158,11 +164,21 @@ void Fb_DFA::to_dot(char *fname, char *title) {
 
     for (state_t s=0;s<_size;s++){
         if(!is_accept[s])
+        {
             //fprintf(file, " %ld [shape=circle,label=\"%ld-%ld\"];\n", s, s/17, s%17);
             fprintf(file, " %u [shape=circle,label=\"%u\"];\n", s, s);
+        }
         else
+        {
+            char tmp[100] = "\0";
+            for(auto& it: *accept_list[s]){
+                char single[10];
+                sprintf(single, " %u", it);
+                strcat(tmp, single);
+            }
             //fprintf(file, " %ld [shape=doublecircle,label=\"%ld-%ld\"];\n", s, s/17, s%17);
-            fprintf(file, " %u [shape=doublecircle,label=\"%u\"];\n", s, s);
+            fprintf(file, " %u [shape=doublecircle,label=\"%u/%s\"];\n", s, s, tmp);
+        }
     }
     int csize = 16;
     int *mark=allocate_int_array(csize);
@@ -271,10 +287,12 @@ int Fb_DFA::cons2states() {
 void try_insert_new_accept(Fb_DFA *dfa1, Fb_DFA *dfa2, Fb_DFA *newdfa, state_t s1, state_t s2, state_t news){
     if(!dfa1->is_accept[s1] && !dfa2->is_accept[s2]) return;
     newdfa->is_accept[news] = 1;
-    newdfa->accept_to_prefix_dfa[news] = new list<uint16_t >();
-    list<uint16_t >* newa = newdfa->accept_to_prefix_dfa[news];
-    list<uint16_t >* a1 = dfa1->accept_to_prefix_dfa[s1];
-    list<uint16_t >* a2 = dfa2->accept_to_prefix_dfa[s2];
+    newdfa->accept_list[news] = new list<uint16_t >();
+    list<uint16_t >* newa = newdfa->accept_list[news];
+    list<uint16_t >* a1 = nullptr;
+    if(dfa1->accept_list != nullptr) a1 = dfa1->accept_list[s1];
+    list<uint16_t >* a2 = nullptr;
+    if(dfa2->accept_list != nullptr) a2 = dfa2->accept_list[s2];
     if(a1 != nullptr) newa->insert(newa->end(), a1->begin(), a1->end());
     if(a2 != nullptr) newa->insert(newa->end(), a2->begin(), a2->end());
 }
@@ -291,8 +309,8 @@ Fb_DFA *Fb_DFA::converge(Fb_DFA *dfa) {
 
     /*2.merge 2 dfas*/
     Fb_DFA* new_dfa = new Fb_DFA();
-    new_dfa->accept_to_prefix_dfa = (list<uint16_t >**) malloc(sizeof(list<uint16_t>*) * new_dfa->entry_allocated);
-    for(state_t s=0; s < entry_allocated; s++) new_dfa->accept_to_prefix_dfa[s] = nullptr;
+    new_dfa->accept_list = (list<uint16_t >**) malloc(sizeof(list<uint16_t>*) * new_dfa->entry_allocated);
+    for(state_t s=0; s < entry_allocated; s++) new_dfa->accept_list[s] = nullptr;
     list<state_t> queue;
     list<pair<state_t, state_t>> mapping_queue;
     map<pair<state_t, state_t>, state_t> mapping;
@@ -332,7 +350,7 @@ Fb_DFA *Fb_DFA::converge(Fb_DFA *dfa) {
         }
     }
 
-    //minimise, time-consuming
+    //minimise, time-consuming & will cause bug (minimization only for single regex)
     Fb_DFA* minimise_dfa = new_dfa;//= new_dfa->minimise2();
     //delete new_dfa;
 
@@ -394,6 +412,7 @@ Fb_DFA *Fb_DFA::minimise2() {
         else add_belong(state, 1, partition_belong1, &v1);
         //else partition_belong1[state] = 1;
     }
+    /*one bug: 由于视所有相同具有转移边的状态为相同状态，仅能区分状态是否为accept，不能用于判定哪一条规则成功匹配*/
 
     /*step2. repeat partition state set unless no new distinguishable states are generated*/
     int* partition_pre = partition_belong1;
@@ -506,6 +525,20 @@ Fb_DFA *Fb_DFA::minimise2() {
         }
     }
 
+    //init accept list for reduced_dfa
+    reduced_dfa->init_accept_rules();
+    //write accept list
+    for(int i = 0; i < v_next->size(); i++){
+        list<state_t>* lis = (*v_next)[i];
+        for(auto &state: *lis){
+            if(is_accept[state] && reduced_dfa->is_accept[partition_state_map[i]]){
+                list<uint16_t> * to_change_accept_list = reduced_dfa->accept_list[partition_state_map[i]];
+                to_change_accept_list->insert(to_change_accept_list->end(), accept_list[state]->begin(), accept_list[state]->end());
+            }
+        }
+    }
+
+
     //free resources
     free(partition_belong1);
     free(partition_belong2);
@@ -576,7 +609,7 @@ void* Fb_DFA::to_BRAM(uint16_t dfaid, map<uint32_t, list<uint16_t>* > *mapping_t
             uint32_t key = (dfaid * MAX_STATES_NUMBER) + newstate;
             //auto lis = new list<uint16_t>();
             //lis->insert(lis->begin(), accept_to_prefix_dfa[state]->begin(), accept_to_prefix_dfa[state]->end());
-            (*mapping_table)[key] = accept_to_prefix_dfa[state]; //指针易被释放 //lis;
+            (*mapping_table)[key] = accept_list[state]; //指针易被释放 //lis;
         }
         else new_accept[newstate] = 0;
 
@@ -646,4 +679,29 @@ bool Fb_DFA::is_bigstate(state_t s) {
     for(int c = 0; c < 16; c++) states.insert(state_table[s][c]);
     if(states.size() <= 2) return false;
     return true;
+}
+
+void Fb_DFA::init_accept_rules() {
+    if(accept_list == nullptr){
+        accept_list = (list<uint16_t >**) malloc(sizeof(list<uint16_t>*) * _size);
+        for(state_t s = 0; s < _size; s++) {
+            if(is_accept[s]) {
+                accept_list[s] = new list<uint16_t>();
+                if(ind_re_report != INVALID_ID)
+                {
+                    accept_list[s]->push_back(ind_re_report);
+                }
+            }
+            else accept_list[s] = nullptr;
+        }
+    }
+    else if(ind_re_report != INVALID_ID){
+        for(state_t s = 0; s < _size; s++) {
+            if(is_accept[s]) {
+                if(accept_list[s] == nullptr) accept_list[s] = new list<uint16_t>();
+                accept_list[s]->push_back(ind_re_report);
+            }
+            else accept_list[s] = nullptr;
+        }
+    }
 };

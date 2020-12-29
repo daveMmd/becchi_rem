@@ -213,6 +213,19 @@ bool contain_dotstar(char *re){
     return false;
 }
 
+bool is_explosive(char *re){
+    char R_post[1000], R_pre[1000];//, R_post[1000];
+    decompose(re, R_pre, R_post, 1000, false,true);
+    if(strcmp(R_post, "^") == 0 && lis_R_post.empty()) return false;
+    printf("explosion re:%s\n", re);
+    return true;
+}
+
+int char_count(char *re){
+    Component* comp = parse(re);
+    return comp->num_concat();
+}
+
 double extract_simplest(char *re, char *R_pre, char* R_middle, char *R_post){
     //todo
     //init R_pre, R_mid, R_post

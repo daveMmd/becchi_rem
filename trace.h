@@ -67,6 +67,7 @@
 //#define MATCH_ONCE //dave add: one pattern only report the first match (for prefix_DFA)
 //#define ACTIVATE_ONCE_DOTSTAR //控制.*是否只激发一次后续dfa激活
 #define MAX_PKT_NUM 100000
+#define MATCH_ONCE
 
 struct match_statics_{
     unsigned int char_num;

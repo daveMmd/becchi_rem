@@ -200,7 +200,7 @@ DFA *dfas_merge_improve(list<DFA*> *tomerge_lis, int k){
 }
 
 DFA *hm_dfalist2dfa(list<DFA*> *dfa_list, int k, bool improved){
-    assert(improved); // only implement improved version
+    //assert(improved); // only implement improved version
     unsigned long dfa_amount = dfa_list->size();
     while(dfa_amount != 1){
         fprintf(stderr,"dfa_amout:%d\n", dfa_amount);

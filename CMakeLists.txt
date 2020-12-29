@@ -40,7 +40,7 @@ set(parser ${stdinc} ${dfa} ${nfa} parser.cpp)
 #test for component parse
 add_subdirectory(component_tree)
 #final for fpga
-add_executable(bram_fpga2 dave_subset.cpp ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} main_fpga_2.cpp ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp hierarMerging.cpp dave_nfa.cpp hfadump.cpp set.cpp Fb_DFA.cpp Fb_DFA.h Fb_NFA.cpp Fb_NFA.h prefix_DFA.cpp)
+add_executable(bram_fpga2 rcdfa.cpp dave_subset.cpp ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} main_fpga_2.cpp ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp hierarMerging.cpp dave_nfa.cpp hfadump.cpp set.cpp Fb_DFA.cpp Fb_DFA.h Fb_NFA.cpp Fb_NFA.h prefix_DFA.cpp)
 target_link_libraries(bram_fpga2 parse)
 
 add_executable(runtime_fpga runtime_fpga.cpp dave_subset.cpp ${stdinc} ${int_set} ${linked_set} ${partition} ${wgraph} ${dheap} ${dfa} ${nfa} c_type.cpp ecdfa.cpp ${subset} ${parser} ${trace} ${hybrid_fa} cache.cpp fa_memory.cpp dfas_memory.cpp hierarMerging.cpp dave_nfa.cpp hfadump.cpp set.cpp Fb_DFA.cpp Fb_DFA.h Fb_NFA.cpp Fb_NFA.h prefix_DFA.cpp)

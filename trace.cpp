@@ -1319,6 +1319,7 @@ match_statics trace::traverse(list<prefix_DFA*> *prefixDfa_list, FILE *stream) {
     }
     lis_res.sort(mycomp);
     for(auto& it: lis_res){
+        if(it.first.first == 0) continue; //不输出未匹配re
         printf("complete re:%s\n", it.second->complete_re);
         printf("prefix re:%s\n", it.second->re);
         printf("single_total_states:%u, single_matching_times:%u\n", it.first.first, it.first.second);

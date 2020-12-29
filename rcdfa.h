@@ -36,6 +36,8 @@ public:
 
 	unsigned int get_m_size();
 	unsigned int getMemSize();
+	/*dave:each state is of 16bits*/
+	uint32_t get_real_mem_size();
 	
 	void to_dot(FILE *file, const char *title);
 	
