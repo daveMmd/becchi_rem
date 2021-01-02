@@ -1802,5 +1802,61 @@ void DFA::initialize_masktable()
             }
         }
     }
+}
 
+/*add by dave*/
+void DFA::renumber() {
+    state_t *old2new_state_map = (state_t *) malloc(sizeof(state_t) * (_size + 5));
+    state_t *new2old_state_map = (state_t *) malloc(sizeof(state_t) * (_size + 5));
+
+    state_t new_id = 0;
+    for(state_t s = 0; s < _size; s++){
+        if(!accepts(s)->empty()){
+            if(accepts(s)->size() > 1) {
+                fprintf(stderr, "accept state (%u) with more than one accept rules!\n", s);
+            }
+            old2new_state_map[s] = new_id;
+            new2old_state_map[new_id++] = s;
+        }
+    }
+
+    max_accept_state = new_id-1;
+    initial_state = new_id;
+
+    for(state_t s = 0; s < _size; s++){
+        if(accepts(s)->empty()){
+            old2new_state_map[s] = new_id;
+            new2old_state_map[new_id++] = s;
+        }
+    }
+
+    if(new_id != _size) printf("error: now_id != _size !\n");
+
+    //change STT
+    state_t** new_stt = (state_t**) malloc(sizeof(state_t *) * (_size + 5));
+    for(state_t s = 0; s < _size; s++){
+        new_stt[s] = (state_t *) malloc(sizeof(state_t) * CSIZE);
+    }
+
+    for(state_t source_state = 0; source_state < _size; source_state++) {
+        for(int c=0; c<CSIZE; c++){
+            state_t old_source = new2old_state_map[source_state];
+            state_t old_target = state_table[old_source][c];
+            new_stt[source_state][c] = old2new_state_map[old_target];
+        }
+    }
+
+    //替换deadstate
+    dead_state = old2new_state_map[dead_state];
+
+    //释放原stt, 替换new stt
+    for(state_t s = 0; s < _size; s++){
+        if(state_table[s] != nullptr) free(state_table[s]);
+    }
+    free(state_table);
+    state_table = new_stt;
+
+    //释放临时资源
+    free(old2new_state_map);
+    free(new2old_state_map);
 }

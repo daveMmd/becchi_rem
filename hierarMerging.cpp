@@ -157,6 +157,17 @@ DFA *dfas_merge_improve(list<DFA*> *tomerge_lis, int k){
                 mapping_queue->push_back(targetLis);
                 mapProcessed[targetLis] = nextState;
 
+                //set deadstate
+                cnt = 0;
+                bool flag_dead = true;
+                for(auto it_dfa: *tomerge_lis){
+                    if(targetLis[cnt++] != it_dfa->dead_state){
+                        flag_dead = false;
+                        break;
+                    }
+                }
+                if(flag_dead) dfa->set_dead_state(nextState);
+
                 /*border for hfa*/
                 nfa_set *border_nfaset = new nfa_set ();
                 int ind = 0;

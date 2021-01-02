@@ -133,7 +133,6 @@ private:
 
     /**/
     //int *is_accept;
-
 	/* number of entry allocated (for dynamic allocation) */
     unsigned int entry_allocated;
 		
@@ -145,6 +144,11 @@ private:
 public:
     /* state involving no progression */
     state_t dead_state;
+
+    /*add by dave: used for PFAC verify: <= max_accept_state 的状态均为accept state*/
+    unsigned int max_accept_state;
+
+    unsigned int initial_state;
 
     /*add by dave*/
     unsigned char **mask_table;
@@ -321,7 +325,9 @@ public:
 	 * Returns the resulting number of trees.
 	 */
 	unsigned CD2FA();
-	
+
+    //将accept states(0->#rules-1)排在最前面, initial state, 其他state
+    void renumber();
 };
 
 inline void DFA::add_transition(state_t old_state, symbol_t c, state_t new_state){ state_table[old_state][c]=new_state;}	

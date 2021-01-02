@@ -68,6 +68,8 @@
 //#define ACTIVATE_ONCE_DOTSTAR //控制.*是否只激发一次后续dfa激活
 #define MAX_PKT_NUM 100000
 #define MATCH_ONCE
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
 
 struct match_statics_{
     unsigned int char_num;
@@ -122,6 +124,10 @@ public:
 	
 	/* traverses the given dfa and prints statistics to stream */ 
 	void traverse(DFA *dfa, FILE *stream=stdout);
+	void traverse_test_DFA_speed(DFA *dfa, int repetition_times = 10, FILE *stream=stdout);
+    void traverse_test_PFAC_speed(DFA *dfa, int repetition_times = 10, FILE *stream=stdout);
+    /*测试改写代码，增加IPC（单核指令并行度）*/
+    void traverse_test_PFAC_speed2(DFA *dfa, int repetition_times = 10, FILE *stream=stdout);
 
 	/*dave add: traverses the given prefix_dfa and prints statistics to stream*/
 	void traverse(prefix_DFA* prefixDfa, match_statics *statics, FILE *stream=stdout);

@@ -45,6 +45,7 @@
 #include <set>
 #include <iterator>
 #include <iostream>
+#include <sys/time.h>
 #include "parse_pcap.h"
 
 using namespace std;
@@ -125,6 +126,192 @@ void trace::traverse(DFA *dfa, FILE *stream){
 	fprintf(stream,"rules matched: %ld\n",accepted_rules->size());	
 	free(stats);		
 	delete accepted_rules;
+}
+
+void trace::traverse_test_PFAC_speed2(DFA *dfa, int repetition_times, FILE *stream){
+    if (tracefile==NULL) fatal("trace file is NULL!");
+    fseek(tracefile, 0, SEEK_END);
+    int flen = ftell(tracefile);
+    rewind(tracefile);
+
+    char *input_data = (char *) malloc(sizeof(char) * (flen + 100));
+    char c = fgetc(tracefile);
+    int input_offset = 0;
+    while(c!=EOF){
+        input_data[input_offset++] = c;
+        c=fgetc(tracefile);
+    }
+
+    timeval start, end;
+    int matched_times = 0;
+
+    gettimeofday(&start, nullptr);
+    for(int i = 0; i < repetition_times; i++){
+        state_t s1 = dfa->max_accept_state + 1;
+        state_t s2 = dfa->max_accept_state + 1;
+        state_t s3 = dfa->max_accept_state + 1;
+        state_t s4 = dfa->max_accept_state + 1;
+
+        int nxt_off = 4;
+        int off1 = 0;
+        int off2 = 1;
+        int off3 = 2;
+        int off4 = 3;
+        while(off1 < flen || off2 < flen || off3 < flen || off4 < flen){
+            if(off1 < flen){
+                char c = input_data[off1++];
+                s1 = dfa->get_next_state(s1,(unsigned char)c);
+                if (s1 <= dfa->max_accept_state){
+                    matched_times++;
+                }
+                else if(s1 == dfa->dead_state){
+                    s1 = dfa->max_accept_state + 1;
+                    off1 = nxt_off++;
+                }
+            }
+            else{
+                s1 = dfa->max_accept_state + 1;
+                off1 = nxt_off++;
+            }
+
+            if(off2 < flen){
+                char c = input_data[off2++];
+                s2 = dfa->get_next_state(s2,(unsigned char)c);
+                if (s2 <= dfa->max_accept_state){
+                    matched_times++;
+                }
+                else if(s2 == dfa->dead_state){
+                    s2 = dfa->max_accept_state + 1;
+                    off2 = nxt_off++;
+                }
+            }
+            else{
+                s2 = dfa->max_accept_state + 1;
+                off2 = nxt_off++;
+            }
+
+            if(off3 < flen){
+                char c = input_data[off3++];
+                s3 = dfa->get_next_state(s3,(unsigned char)c);
+                if (s3 <= dfa->max_accept_state){
+                    matched_times++;
+                }
+                else if(s3 == dfa->dead_state){
+                    s3 = dfa->max_accept_state + 1;
+                    off3 = nxt_off++;
+                }
+            }
+            else{
+                s3 = dfa->max_accept_state + 1;
+                off3 = nxt_off++;
+            }
+
+            if(off4 < flen){
+                char c = input_data[off4++];
+                s4 = dfa->get_next_state(s4,(unsigned char)c);
+                if (s4 <= dfa->max_accept_state){
+                    matched_times++;
+                }
+                else if(s4 == dfa->dead_state){
+                    s4 = dfa->max_accept_state + 1;
+                    off4 = nxt_off++;
+                }
+            }
+            else{
+                s4 = dfa->max_accept_state + 1;
+                off4 = nxt_off++;
+            }
+        }
+    }
+    gettimeofday(&end, nullptr);
+    printf("matched_times:%d\n", matched_times);
+    double time_cost_seconds = (end.tv_sec - start.tv_sec) + 0.000001 * (end.tv_usec - start.tv_usec);
+
+    double throughput_Mbps = flen * 1.0 / time_cost_seconds / 1000000 * 8 * repetition_times;
+    printf("Throughput: %lf\n", throughput_Mbps);
+}
+
+void trace::traverse_test_PFAC_speed(DFA *dfa, int repetition_times, FILE *stream){
+    if (tracefile==NULL) fatal("trace file is NULL!");
+    fseek(tracefile, 0, SEEK_END);
+    int flen = ftell(tracefile);
+    rewind(tracefile);
+
+    char *input_data = (char *) malloc(sizeof(char) * (flen + 100));
+    char c = fgetc(tracefile);
+    int input_offset = 0;
+    while(c!=EOF){
+        input_data[input_offset++] = c;
+        c=fgetc(tracefile);
+    }
+
+    timeval start, end;
+    int matched_times = 0;
+
+    gettimeofday(&start, nullptr);
+    for(int i = 0; i < repetition_times; i++){
+        for(int start = 0; start < flen; start++){
+            //state_t state = dfa->max_accept_state + 1; //initial state
+            state_t state = dfa->initial_state; //initial state
+            input_offset = start;
+            //while(likely(input_offset < flen)){
+            while(input_offset < flen){
+                char c = input_data[input_offset++];
+                state = dfa->get_next_state(state,(unsigned char)c);
+                //if(likely(state == dfa->dead_state)){
+                if(state == dfa->dead_state){
+                    break;
+                }
+                //else if (unlikely(state <= dfa->max_accept_state)){
+                else if (state <= dfa->max_accept_state){
+                    matched_times++;
+                }
+            }
+        }
+    }
+    gettimeofday(&end, nullptr);
+    printf("matched_times:%d\n", matched_times);
+    double time_cost_seconds = (end.tv_sec - start.tv_sec) + 0.000001 * (end.tv_usec - start.tv_usec);
+
+    double throughput_Mbps = flen * 1.0 / time_cost_seconds / 1000000 * 8 * repetition_times;
+    printf("Throughput: %lf\n", throughput_Mbps);
+}
+
+void trace::traverse_test_DFA_speed(DFA *dfa, int repetition_times, FILE *stream){
+    if (tracefile==NULL) fatal("trace file is NULL!");
+    fseek(tracefile, 0, SEEK_END);
+    int flen = ftell(tracefile);
+    rewind(tracefile);
+
+    char *input_data = (char *) malloc(sizeof(char) * (flen + 100));
+    char c = fgetc(tracefile);
+    int input_offset = 0;
+    while(c!=EOF){
+        input_data[input_offset++] = c;
+        c=fgetc(tracefile);
+    }
+
+    timeval start, end;
+    int matched_times = 0;
+
+    gettimeofday(&start, nullptr);
+    for(int i = 0; i < repetition_times; i++){
+        state_t state=0;
+        input_offset = 0;
+        while(input_offset < flen){
+            char c = input_data[input_offset++];
+            state=dfa->get_next_state(state,(unsigned char)c);
+            if (!dfa->accepts(state)->empty()){
+                matched_times++;
+            }
+        }
+    }
+    gettimeofday(&end, nullptr);
+    printf("matched_times:%d\n", matched_times);
+    double time_cost_seconds = (end.tv_sec - start.tv_sec) + 0.000001 * (end.tv_usec - start.tv_usec);
+
+    double throughput_Mbps = flen * 1.0 / time_cost_seconds / 1000000 * 8 * repetition_times;
+    printf("Throughput: %lf\n", throughput_Mbps);
 }
 
 void trace::traverse(EgCmpDfa *ecdfa, FILE *stream){
