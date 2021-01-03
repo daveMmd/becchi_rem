@@ -109,7 +109,7 @@ protected:
         bool flag_mask_table;
 
 		/* state_table[old_state][symbol]=new_state*/
-	    state_t **state_table;
+	    //state_t **state_table;
 
 		/* default transitions (one per state) */
         state_t *default_tx;
@@ -145,10 +145,14 @@ public:
     /* state involving no progression */
     state_t dead_state;
 
+    //state_t **state_table;
+
     /*add by dave: used for PFAC verify: <= max_accept_state 的状态均为accept state*/
     unsigned int max_accept_state;
 
     unsigned int initial_state;
+
+    state_t **state_table;
 
     /*add by dave*/
     unsigned char **mask_table;
